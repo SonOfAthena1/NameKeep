@@ -21,9 +21,8 @@ export function Collapsible({ children, title }: PropsWithChildren & { title: st
           <SymbolView
             name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
             size={14}
-            weight="bold"
             tintColor={theme.text}
-            style={{ transform: [{ rotate: isOpen ? '-90deg' : '90deg' }] }}
+            style={{ transform: [{ rotate: isOpen ? '90deg' : '0deg' }] }}
           />
         </ThemedView>
 

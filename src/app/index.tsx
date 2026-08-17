@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import {
   Pressable,
@@ -174,7 +175,16 @@ export default function HomeScreen() {
                     pressed && styles.sectionHeaderPressed,
                   ]}>
                   <View style={styles.chevronBox}>
-                    <Text style={styles.chevron}>{isCollapsed ? '›' : '⌄'}</Text>
+                    <SymbolView
+                      name={{
+                        ios: 'chevron.right',
+                        android: 'chevron_right',
+                        web: 'chevron_right',
+                      }}
+                      size={17}
+                      tintColor={theme.accent}
+                      style={{ transform: [{ rotate: isCollapsed ? '0deg' : '90deg' }] }}
+                    />
                   </View>
                   <Text style={styles.sectionTitle}>{label.name}</Text>
                   <View style={styles.countPill}>
@@ -386,13 +396,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-  },
-  chevron: {
-    color: theme.accent,
-    fontSize: 23,
-    lineHeight: 24,
-    fontWeight: '700',
-    marginTop: -2,
   },
   sectionTitle: {
     flex: 1,
