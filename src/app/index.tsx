@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -77,7 +78,10 @@ const DESCRIPTION_MAX_LENGTH = 180;
 const LABEL_MAX_LENGTH = 40;
 const CONTROL_CORNER_RADIUS = 14;
 
-type CreateModal = 'person' | 'label' | null;
+type Editor = {
+  kind: 'person' | 'label';
+  id: string | null;
+} | null;
 
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
@@ -87,7 +91,7 @@ export default function HomeScreen() {
     () => new Set(),
   );
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
-  const [createModal, setCreateModal] = useState<CreateModal>(null);
+  const [editor, setEditor] = useState<Editor>(null);
   const [personName, setPersonName] = useState('');
   const [personDescription, setPersonDescription] = useState('');
   const [personLabelId, setPersonLabelId] = useState<string | null>(null);
@@ -160,13 +164,28 @@ export default function HomeScreen() {
     });
   }
 
-  function openCreateModal(modal: Exclude<CreateModal, null>) {
+  function openCreateModal(kind: 'person' | 'label') {
     setIsAddMenuOpen(false);
-    setCreateModal(modal);
+    setEditor({ kind, id: null });
   }
 
-  function closeCreateModal() {
-    setCreateModal(null);
+  function openPersonEditor(person: Person) {
+    setIsAddMenuOpen(false);
+    setPersonName(person.name);
+    setPersonDescription(person.description);
+    setPersonLabelId(person.labelId);
+    setEditor({ kind: 'person', id: person.id });
+  }
+
+  function openLabelEditor(label: Label) {
+    setIsAddMenuOpen(false);
+    setLabelName(label.name);
+    setLabelColor(label.color);
+    setEditor({ kind: 'label', id: label.id });
+  }
+
+  function closeEditor() {
+    setEditor(null);
     setIsLabelPickerOpen(false);
     setPersonName('');
     setPersonDescription('');
@@ -175,36 +194,115 @@ export default function HomeScreen() {
     setLabelColor('green');
   }
 
-  function addPerson() {
-    setPeople((current) => [
-      ...current,
-      {
-        id: `person-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: personName.trim(),
-        description: personDescription.trim(),
-        labelId: personLabelId,
-        createdAt: Date.now(),
-      },
-    ]);
-    closeCreateModal();
+  function savePerson() {
+    const updates = {
+      name: personName.trim(),
+      description: personDescription.trim(),
+      labelId: personLabelId,
+    };
+
+    if (editor?.kind === 'person' && editor.id) {
+      setPeople((current) =>
+        current.map((person) =>
+          person.id === editor.id ? { ...person, ...updates } : person,
+        ),
+      );
+    } else {
+      setPeople((current) => [
+        ...current,
+        {
+          id: `person-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          ...updates,
+          createdAt: Date.now(),
+        },
+      ]);
+    }
+    closeEditor();
   }
 
-  function addLabel() {
+  function saveLabel() {
     const trimmedName = labelName.trim();
     if (!trimmedName) {
       return;
     }
 
-    setLabels((current) => [
-      ...current,
-      {
-        id: `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: trimmedName,
-        color: labelColor,
-        createdAt: Date.now(),
-      },
-    ]);
-    closeCreateModal();
+    if (editor?.kind === 'label' && editor.id) {
+      setLabels((current) =>
+        current.map((label) =>
+          label.id === editor.id
+            ? { ...label, name: trimmedName, color: labelColor }
+            : label,
+        ),
+      );
+    } else {
+      setLabels((current) => [
+        ...current,
+        {
+          id: `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: trimmedName,
+          color: labelColor,
+          createdAt: Date.now(),
+        },
+      ]);
+    }
+    closeEditor();
+  }
+
+  function deleteEditedItem() {
+    if (!editor?.id) {
+      return;
+    }
+
+    const { id, kind } = editor;
+    const itemName = kind === 'person'
+      ? people.find((person) => person.id === id)?.name || 'this person'
+      : labels.find((label) => label.id === id)?.name || 'this label';
+    const message = kind === 'label'
+      ? `Delete “${itemName}”? People using this label will move to No Label.`
+      : `Delete “${itemName}”? This cannot be undone.`;
+
+    const performDelete = () => {
+      if (kind === 'person') {
+        setPeople((current) =>
+          current.filter((person) => person.id !== id),
+        );
+      } else {
+        setPeople((current) =>
+          current.map((person) =>
+            person.labelId === id ? { ...person, labelId: null } : person,
+          ),
+        );
+        setLabels((current) =>
+          current.filter((label) => label.id !== id),
+        );
+        setCollapsedLabelIds((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+      }
+      closeEditor();
+    };
+
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm(message)) {
+        performDelete();
+      }
+      return;
+    }
+
+    Alert.alert(
+      `Delete ${kind}?`,
+      message,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: performDelete,
+        },
+      ],
+    );
   }
 
   return (
@@ -297,6 +395,26 @@ export default function HomeScreen() {
                       {people.length}
                     </Text>
                   </View>
+                  {label.id !== 'no-label' && (
+                    <Pressable
+                      accessibilityLabel={`Edit ${label.name} label`}
+                      accessibilityRole="button"
+                      hitSlop={10}
+                      onPress={(event) => {
+                        event.stopPropagation();
+                        openLabelEditor(label);
+                      }}
+                      style={({ pressed }) => [
+                        styles.labelEditButton,
+                        pressed && styles.editButtonPressed,
+                      ]}>
+                      <SymbolView
+                        name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                        size={18}
+                        tintColor={labelTheme.foreground}
+                      />
+                    </Pressable>
+                  )}
                 </Pressable>
 
                 {!isCollapsed && people.length > 0 && (
@@ -317,6 +435,21 @@ export default function HomeScreen() {
                             )}
                           </Text>
                         </View>
+                        <Pressable
+                          accessibilityLabel={`Edit ${person.name || 'unnamed person'}`}
+                          accessibilityRole="button"
+                          hitSlop={10}
+                          onPress={() => openPersonEditor(person)}
+                          style={({ pressed }) => [
+                            styles.personEditButton,
+                            pressed && styles.editButtonPressed,
+                          ]}>
+                          <SymbolView
+                            name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                            size={18}
+                            tintColor={theme.textMuted}
+                          />
+                        </Pressable>
                       </View>
                     ))}
                   </View>
@@ -378,16 +511,16 @@ export default function HomeScreen() {
 
       <Modal
         animationType="fade"
-        onRequestClose={closeCreateModal}
+        onRequestClose={closeEditor}
         presentationStyle="overFullScreen"
         transparent
-        visible={createModal !== null}>
+        visible={editor !== null}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalKeyboardView}>
           <Pressable
             accessibilityLabel="Close dialog"
-            onPress={closeCreateModal}
+            onPress={closeEditor}
             style={styles.modalBackdrop}>
             <Pressable
               accessibilityRole="none"
@@ -395,16 +528,20 @@ export default function HomeScreen() {
               style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <View>
-                  <Text style={styles.modalEyebrow}>ADD TO NAMEKEEP</Text>
+                  <Text style={styles.modalEyebrow}>
+                    {editor?.id ? 'EDIT IN NAMEKEEP' : 'ADD TO NAMEKEEP'}
+                  </Text>
                   <Text style={styles.modalTitle}>
-                    {createModal === 'person' ? 'New Person' : 'New Label'}
+                    {editor?.kind === 'person'
+                      ? editor.id ? 'Edit Person' : 'New Person'
+                      : editor?.id ? 'Edit Label' : 'New Label'}
                   </Text>
                 </View>
                 <Pressable
                   accessibilityLabel="Close dialog"
                   accessibilityRole="button"
                   hitSlop={10}
-                  onPress={closeCreateModal}
+                  onPress={closeEditor}
                   style={({ pressed }) => [
                     styles.modalCloseButton,
                     pressed && styles.modalCloseButtonPressed,
@@ -417,7 +554,7 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              {createModal === 'person' ? (
+              {editor?.kind === 'person' ? (
                 <>
                   <View style={styles.fieldGroup}>
                     <View style={styles.fieldLabelRow}>
@@ -547,7 +684,7 @@ export default function HomeScreen() {
                     autoFocus
                     maxLength={LABEL_MAX_LENGTH}
                     onChangeText={setLabelName}
-                    onSubmitEditing={addLabel}
+                    onSubmitEditing={saveLabel}
                     placeholder="For example, Work or Biology"
                     placeholderTextColor={theme.textFaint}
                     returnKeyType="done"
@@ -594,9 +731,25 @@ export default function HomeScreen() {
               )}
 
               <View style={styles.modalActions}>
+                {!!editor?.id && (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={deleteEditedItem}
+                    style={({ pressed }) => [
+                      styles.deleteButton,
+                      pressed && styles.deleteButtonPressed,
+                    ]}>
+                    <SymbolView
+                      name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+                      size={17}
+                      tintColor={theme.danger}
+                    />
+                    <Text style={styles.deleteButtonText}>Delete</Text>
+                  </Pressable>
+                )}
                 <Pressable
                   accessibilityRole="button"
-                  onPress={closeCreateModal}
+                  onPress={closeEditor}
                   style={({ pressed }) => [
                     styles.cancelButton,
                     pressed && styles.cancelButtonPressed,
@@ -605,15 +758,17 @@ export default function HomeScreen() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={createModal === 'label' && !labelName.trim()}
-                  onPress={createModal === 'person' ? addPerson : addLabel}
+                  disabled={editor?.kind === 'label' && !labelName.trim()}
+                  onPress={editor?.kind === 'person' ? savePerson : saveLabel}
                   style={({ pressed }) => [
                     styles.saveButton,
-                    createModal === 'label' && !labelName.trim() && styles.saveButtonDisabled,
+                    editor?.kind === 'label' && !labelName.trim() && styles.saveButtonDisabled,
                     pressed && styles.saveButtonPressed,
                   ]}>
                   <Text style={styles.saveButtonText}>
-                    {createModal === 'person' ? 'Add Person' : 'Add Label'}
+                    {editor?.id
+                      ? 'Save Changes'
+                      : editor?.kind === 'person' ? 'Add Person' : 'Add Label'}
                   </Text>
                 </Pressable>
               </View>
@@ -811,6 +966,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  labelEditButton: {
+    width: 18,
+    height: 18,
+    marginLeft: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editButtonPressed: {
+    opacity: 0.55,
+  },
   peopleList: {
     paddingHorizontal: 15,
     paddingBottom: 4,
@@ -827,6 +992,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   personCopy: {
     flex: 1,
+    minWidth: 0,
+  },
+  personEditButton: {
+    width: 18,
+    height: 18,
+    marginLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   personLine: {
     color: theme.textMuted,
@@ -1101,9 +1274,31 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
     gap: 10,
     marginTop: 5,
+  },
+  deleteButton: {
+    minHeight: 46,
+    paddingHorizontal: 13,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.danger,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    marginRight: 'auto',
+  },
+  deleteButtonPressed: {
+    backgroundColor: theme.surfacePressed,
+    opacity: 0.75,
+  },
+  deleteButtonText: {
+    color: theme.danger,
+    fontSize: 14,
+    fontWeight: '700',
   },
   cancelButton: {
     minHeight: 46,
