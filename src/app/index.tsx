@@ -202,8 +202,10 @@ export default function HomeScreen() {
                           <Text style={styles.avatarText}>{getInitials(person.name)}</Text>
                         </View>
                         <View style={styles.personCopy}>
-                          <Text style={styles.personName}>{person.name}</Text>
-                          <Text style={styles.personDescription}>{person.description}</Text>
+                          <Text style={styles.personLine}>
+                            <Text style={styles.personName}>{person.name}</Text>
+                            <Text style={styles.personDescription}> — {person.description}</Text>
+                          </Text>
                         </View>
                       </View>
                     ))}
@@ -297,10 +299,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   title: {
     color: theme.text,
-    fontSize: 32,
-    lineHeight: 37,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: '800',
-    letterSpacing: -1.1,
+    letterSpacing: -0.45,
   },
   subtitle: {
     color: theme.textMuted,
@@ -451,7 +453,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   personCopy: {
     flex: 1,
-    gap: 3,
+  },
+  personLine: {
+    color: theme.textMuted,
+    fontSize: 13,
+    lineHeight: 20,
   },
   personName: {
     color: theme.text,
