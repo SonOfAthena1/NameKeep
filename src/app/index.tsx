@@ -784,19 +784,14 @@ export default function HomeScreen() {
                     onPress={deleteEditedItem}
                     style={({ pressed }) => [
                       styles.deleteButton,
-                      styles.editorActionButton,
                       pressed && styles.deleteButtonPressed,
                     ]}>
                     <SymbolView
                       name={{ ios: 'trash', android: 'delete', web: 'delete' }}
                       size={17}
-                      tintColor={theme.danger}
+                      tintColor="#FFFFFF"
                     />
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.deleteButtonText, styles.editorActionText]}>
-                      Delete
-                    </Text>
+                    <Text style={styles.deleteButtonText}>Delete</Text>
                   </Pressable>
                 )}
                 <Pressable
@@ -804,17 +799,9 @@ export default function HomeScreen() {
                   onPress={closeEditor}
                   style={({ pressed }) => [
                     styles.cancelButton,
-                    !!editor?.id && styles.editorActionButton,
                     pressed && styles.cancelButtonPressed,
                   ]}>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.cancelButtonText,
-                      !!editor?.id && styles.editorActionText,
-                    ]}>
-                    Cancel
-                  </Text>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -822,18 +809,13 @@ export default function HomeScreen() {
                   onPress={editor?.kind === 'person' ? savePerson : saveLabel}
                   style={({ pressed }) => [
                     styles.saveButton,
-                    !!editor?.id && styles.editorActionButton,
+                    !!editor?.id && styles.editorSaveButton,
                     editor?.kind === 'label' && !labelName.trim() && styles.saveButtonDisabled,
                     pressed && styles.saveButtonPressed,
                   ]}>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.saveButtonText,
-                      !!editor?.id && styles.editorActionText,
-                    ]}>
+                  <Text style={styles.saveButtonText}>
                     {editor?.id
-                      ? 'Save Changes'
+                      ? 'Save'
                       : editor?.kind === 'person' ? 'Add Person' : 'Add Label'}
                   </Text>
                 </Pressable>
@@ -982,9 +964,9 @@ export default function HomeScreen() {
                 onPress={() => confirmLabelDeletion(false)}
                 style={({ pressed }) => [
                   styles.moveAndDeleteButton,
-                  pressed && styles.saveButtonPressed,
+                  pressed && styles.moveAndDeleteButtonPressed,
                 ]}>
-                <Text style={styles.saveButtonText}>
+                <Text style={styles.moveAndDeleteButtonText}>
                   Move {peopleInDeletedLabel}{' '}
                   {peopleInDeletedLabel === 1 ? 'person' : 'people'} & Delete Label
                 </Text>
@@ -994,9 +976,9 @@ export default function HomeScreen() {
                 onPress={() => confirmLabelDeletion(true)}
                 style={({ pressed }) => [
                   styles.deleteAllButton,
-                  pressed && styles.deleteButtonPressed,
+                  pressed && styles.deleteAllButtonPressed,
                 ]}>
-                <Text style={styles.deleteButtonText}>
+                <Text style={styles.deleteAllButtonText}>
                   Delete Label & {peopleInDeletedLabel}{' '}
                   {peopleInDeletedLabel === 1 ? 'Person' : 'People'}
                 </Text>
@@ -1547,16 +1529,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   editorModalActions: {
     flexWrap: 'nowrap',
-    gap: 6,
   },
-  editorActionButton: {
-    flexShrink: 1,
-    minWidth: 0,
-    paddingHorizontal: 8,
-  },
-  editorActionText: {
-    flexShrink: 1,
-    fontSize: 12,
+  editorSaveButton: {
+    minWidth: 72,
+    paddingHorizontal: 16,
   },
   deleteButton: {
     minHeight: 46,
@@ -1564,6 +1540,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
     borderColor: theme.danger,
+    backgroundColor: theme.danger,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1571,11 +1548,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginRight: 'auto',
   },
   deleteButtonPressed: {
-    backgroundColor: theme.surfacePressed,
-    opacity: 0.75,
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
   },
   deleteButtonText: {
-    color: theme.danger,
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1587,9 +1564,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 16,
     borderRadius: CONTROL_CORNER_RADIUS,
-    backgroundColor: theme.accent,
+    borderWidth: 1,
+    borderColor: theme.accent,
+    backgroundColor: theme.backgroundElement,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  moveAndDeleteButtonPressed: {
+    backgroundColor: theme.backgroundSelected,
+    transform: [{ scale: 0.98 }],
+  },
+  moveAndDeleteButtonText: {
+    color: theme.accent,
+    fontSize: 14,
+    fontWeight: '800',
   },
   deleteAllButton: {
     minHeight: 48,
@@ -1597,8 +1585,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
     borderColor: theme.danger,
+    backgroundColor: theme.danger,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  deleteAllButtonPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
+  },
+  deleteAllButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
   deleteDialogCancelButton: {
     minHeight: 46,
