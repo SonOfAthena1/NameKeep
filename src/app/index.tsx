@@ -110,14 +110,14 @@ export default function HomeScreen() {
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
+          <Text style={styles.title}>People you’ve met</Text>
+
           <View style={styles.brandRow}>
             <View style={styles.brandMark}>
               <Text style={styles.brandInitial}>N</Text>
             </View>
             <Text style={styles.brandName}>NameKeep</Text>
           </View>
-
-          <Text style={styles.title}>People you’ve met</Text>
         </View>
 
         <View style={styles.searchBox}>
@@ -257,13 +257,15 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 22,
+    paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 30,
   },
   brandMark: {
     width: 30,
@@ -286,6 +288,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     letterSpacing: -0.3,
   },
   title: {
+    flexShrink: 1,
     color: theme.text,
     fontSize: 20,
     lineHeight: 24,
@@ -364,7 +367,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   section: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: theme.borderSoft,
+    borderColor: theme.accent,
     backgroundColor: theme.surface,
     marginBottom: 13,
     overflow: 'hidden',
@@ -372,11 +375,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   sectionHeader: {
     minHeight: 59,
     paddingHorizontal: 15,
+    backgroundColor: theme.accent,
     flexDirection: 'row',
     alignItems: 'center',
   },
   sectionHeaderPressed: {
-    backgroundColor: theme.surfacePressed,
+    backgroundColor: theme.accentStrong,
   },
   chevronBox: {
     width: 29,
@@ -389,7 +393,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sectionTitle: {
     flex: 1,
-    color: theme.text,
+    color: theme.backgroundRaised,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.25,
@@ -404,19 +408,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     justifyContent: 'center',
   },
   countText: {
-    color: theme.textMuted,
+    color: theme.accentStrong,
     fontSize: 12,
     fontWeight: '800',
   },
   peopleList: {
     paddingHorizontal: 15,
-    paddingBottom: 7,
+    paddingBottom: 4,
+    backgroundColor: theme.surface,
   },
   personRow: {
-    minHeight: 70,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 6,
   },
   personDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
