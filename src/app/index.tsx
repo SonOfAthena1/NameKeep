@@ -373,7 +373,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     overflow: 'hidden',
   },
   sectionHeader: {
-    minHeight: 59,
+    minHeight: 48,
     paddingHorizontal: 15,
     backgroundColor: theme.accent,
     flexDirection: 'row',
@@ -441,7 +441,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     letterSpacing: -0.15,
   },
   personDescription: {
-    color: theme.textMuted,
+    color: theme.textDescription,
     fontSize: 13,
     lineHeight: 18,
   },
