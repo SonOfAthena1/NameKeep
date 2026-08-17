@@ -304,7 +304,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   searchBox: {
     height: 54,
     marginHorizontal: 24,
-    borderRadius: 17,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: theme.border,
     backgroundColor: theme.backgroundRaised,
@@ -365,7 +365,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: '600',
   },
   section: {
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: theme.accent,
     backgroundColor: theme.surface,
@@ -383,9 +383,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.accentStrong,
   },
   chevronBox: {
-    width: 29,
-    height: 29,
-    borderRadius: 10,
+    width: 25,
+    height: 25,
+    borderRadius: 8,
     backgroundColor: theme.accentMuted,
     alignItems: 'center',
     justifyContent: 'center',
@@ -437,7 +437,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   personName: {
     color: theme.text,
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: -0.15,
   },
   personDescription: {
