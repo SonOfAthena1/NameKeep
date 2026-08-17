@@ -270,7 +270,7 @@ export default function HomeScreen() {
                   </View>
                 </Pressable>
 
-                {!isCollapsed && (
+                {!isCollapsed && people.length > 0 && (
                   <View style={styles.peopleList}>
                     {people.map((person, index) => (
                       <View
@@ -419,6 +419,7 @@ export default function HomeScreen() {
                     <TextInput
                       maxLength={DESCRIPTION_MAX_LENGTH}
                       multiline
+                      numberOfLines={2}
                       onChangeText={setPersonDescription}
                       placeholder="Where you met, what they look like, or anything memorable"
                       placeholderTextColor={theme.textFaint}
@@ -904,10 +905,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalTitle: {
     color: theme.text,
-    fontSize: 25,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: '800',
-    letterSpacing: -0.6,
+    letterSpacing: -0.45,
   },
   modalCloseButton: {
     width: 34,
@@ -954,8 +955,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 15,
   },
   descriptionInput: {
-    minHeight: 94,
-    maxHeight: 130,
+    minHeight: 64,
+    maxHeight: 64,
+    lineHeight: 20,
   },
   labelSelect: {
     minHeight: 49,
