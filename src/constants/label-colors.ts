@@ -7,6 +7,7 @@ export const LABEL_COLOR_OPTIONS = [
   { id: 'orange', name: 'Orange' },
   { id: 'amber', name: 'Amber' },
   { id: 'teal', name: 'Teal' },
+  { id: 'gray', name: 'Gray' },
 ] as const;
 
 export type LabelColor = (typeof LABEL_COLOR_OPTIONS)[number]['id'];
@@ -30,6 +31,7 @@ export const LabelColors: Record<
     orange: { base: '#B86024', pressed: '#9F501B', foreground: '#FFFFFF' },
     amber: { base: '#936600', pressed: '#7D5600', foreground: '#FFFFFF' },
     teal: { base: '#087FA6', pressed: '#076B8C', foreground: '#FFFFFF' },
+    gray: { base: '#292D30', pressed: '#1D2022', foreground: '#FFFFFF' },
   },
   dark: {
     green: { base: '#45E37F', pressed: '#20BE61', foreground: '#061A12' },
@@ -40,5 +42,6 @@ export const LabelColors: Record<
     orange: { base: '#FFAA67', pressed: '#E9904E', foreground: '#291207' },
     amber: { base: '#EBC85C', pressed: '#D3AE3F', foreground: '#211A04' },
     teal: { base: '#48C9EF', pressed: '#2DAED4', foreground: '#051D28' },
+    gray: { base: '#A8AFB5', pressed: '#8E969D', foreground: '#101315' },
   },
 };

@@ -98,6 +98,12 @@ export default function HomeScreen() {
   const [isLabelPickerOpen, setIsLabelPickerOpen] = useState(false);
   const [labelName, setLabelName] = useState('');
   const [labelColor, setLabelColor] = useState<LabelColor>('green');
+  const [labelDeleteId, setLabelDeleteId] = useState<string | null>(null);
+  const [deleteDestinationLabelId, setDeleteDestinationLabelId] = useState<
+    string | null
+  >(null);
+  const [isDeleteDestinationPickerOpen, setIsDeleteDestinationPickerOpen] =
+    useState(false);
   const theme = useTheme();
   const { colorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -151,6 +157,13 @@ export default function HomeScreen() {
 
   const selectedLabelName =
     labels.find((label) => label.id === personLabelId)?.name ?? 'No Label';
+  const labelBeingDeleted = labels.find((label) => label.id === labelDeleteId);
+  const deleteDestinationLabelName =
+    labels.find((label) => label.id === deleteDestinationLabelId)?.name ??
+    'No Label';
+  const peopleInDeletedLabel = people.filter(
+    (person) => person.labelId === labelDeleteId,
+  ).length;
 
   function toggleLabel(labelId: string) {
     setCollapsedLabelIds((current) => {
@@ -254,33 +267,22 @@ export default function HomeScreen() {
     }
 
     const { id, kind } = editor;
-    const itemName = kind === 'person'
-      ? people.find((person) => person.id === id)?.name || 'this person'
-      : labels.find((label) => label.id === id)?.name || 'this label';
-    const message = kind === 'label'
-      ? `Delete “${itemName}”? People using this label will move to No Label.`
-      : `Delete “${itemName}”? This cannot be undone.`;
+    if (kind === 'label') {
+      setLabelDeleteId(id);
+      setDeleteDestinationLabelId(null);
+      setIsDeleteDestinationPickerOpen(false);
+      closeEditor();
+      return;
+    }
+
+    const itemName =
+      people.find((person) => person.id === id)?.name || 'this person';
+    const message = `Delete “${itemName}”? This cannot be undone.`;
 
     const performDelete = () => {
-      if (kind === 'person') {
-        setPeople((current) =>
-          current.filter((person) => person.id !== id),
-        );
-      } else {
-        setPeople((current) =>
-          current.map((person) =>
-            person.labelId === id ? { ...person, labelId: null } : person,
-          ),
-        );
-        setLabels((current) =>
-          current.filter((label) => label.id !== id),
-        );
-        setCollapsedLabelIds((current) => {
-          const next = new Set(current);
-          next.delete(id);
-          return next;
-        });
-      }
+      setPeople((current) =>
+        current.filter((person) => person.id !== id),
+      );
       closeEditor();
     };
 
@@ -292,7 +294,7 @@ export default function HomeScreen() {
     }
 
     Alert.alert(
-      `Delete ${kind}?`,
+      'Delete person?',
       message,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -303,6 +305,46 @@ export default function HomeScreen() {
         },
       ],
     );
+  }
+
+  function closeLabelDeleteDialog() {
+    setLabelDeleteId(null);
+    setDeleteDestinationLabelId(null);
+    setIsDeleteDestinationPickerOpen(false);
+  }
+
+  function cancelLabelDeletion() {
+    const label = labels.find((candidate) => candidate.id === labelDeleteId);
+    closeLabelDeleteDialog();
+    if (label) {
+      openLabelEditor(label);
+    }
+  }
+
+  function confirmLabelDeletion(deletePeople: boolean) {
+    if (!labelDeleteId) {
+      return;
+    }
+
+    const deletedLabelId = labelDeleteId;
+    setPeople((current) =>
+      deletePeople
+        ? current.filter((person) => person.labelId !== deletedLabelId)
+        : current.map((person) =>
+            person.labelId === deletedLabelId
+              ? { ...person, labelId: deleteDestinationLabelId }
+              : person,
+          ),
+    );
+    setLabels((current) =>
+      current.filter((label) => label.id !== deletedLabelId),
+    );
+    setCollapsedLabelIds((current) => {
+      const next = new Set(current);
+      next.delete(deletedLabelId);
+      return next;
+    });
+    closeLabelDeleteDialog();
   }
 
   return (
@@ -731,13 +773,18 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              <View style={styles.modalActions}>
+              <View
+                style={[
+                  styles.modalActions,
+                  !!editor?.id && styles.editorModalActions,
+                ]}>
                 {!!editor?.id && (
                   <Pressable
                     accessibilityRole="button"
                     onPress={deleteEditedItem}
                     style={({ pressed }) => [
                       styles.deleteButton,
+                      styles.editorActionButton,
                       pressed && styles.deleteButtonPressed,
                     ]}>
                     <SymbolView
@@ -745,7 +792,11 @@ export default function HomeScreen() {
                       size={17}
                       tintColor={theme.danger}
                     />
-                    <Text style={styles.deleteButtonText}>Delete</Text>
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.deleteButtonText, styles.editorActionText]}>
+                      Delete
+                    </Text>
                   </Pressable>
                 )}
                 <Pressable
@@ -753,9 +804,17 @@ export default function HomeScreen() {
                   onPress={closeEditor}
                   style={({ pressed }) => [
                     styles.cancelButton,
+                    !!editor?.id && styles.editorActionButton,
                     pressed && styles.cancelButtonPressed,
                   ]}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.cancelButtonText,
+                      !!editor?.id && styles.editorActionText,
+                    ]}>
+                    Cancel
+                  </Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -763,10 +822,16 @@ export default function HomeScreen() {
                   onPress={editor?.kind === 'person' ? savePerson : saveLabel}
                   style={({ pressed }) => [
                     styles.saveButton,
+                    !!editor?.id && styles.editorActionButton,
                     editor?.kind === 'label' && !labelName.trim() && styles.saveButtonDisabled,
                     pressed && styles.saveButtonPressed,
                   ]}>
-                  <Text style={styles.saveButtonText}>
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.saveButtonText,
+                      !!editor?.id && styles.editorActionText,
+                    ]}>
                     {editor?.id
                       ? 'Save Changes'
                       : editor?.kind === 'person' ? 'Add Person' : 'Add Label'}
@@ -776,6 +841,178 @@ export default function HomeScreen() {
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={cancelLabelDeletion}
+        presentationStyle="overFullScreen"
+        transparent
+        visible={labelDeleteId !== null}>
+        <Pressable
+          accessibilityLabel="Close delete label dialog"
+          onPress={cancelLabelDeletion}
+          style={styles.modalBackdrop}>
+          <Pressable
+            accessibilityRole="none"
+            onPress={(event) => event.stopPropagation()}
+            style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderCopy}>
+                <Text style={styles.deleteModalEyebrow}>DELETE LABEL</Text>
+                <Text style={styles.modalTitle}>
+                  Delete “{labelBeingDeleted?.name ?? 'label'}”?
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close delete label dialog"
+                accessibilityRole="button"
+                hitSlop={10}
+                onPress={cancelLabelDeletion}
+                style={({ pressed }) => [
+                  styles.modalCloseButton,
+                  pressed && styles.modalCloseButtonPressed,
+                ]}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={18}
+                  tintColor={theme.textMuted}
+                />
+              </Pressable>
+            </View>
+
+            <Text style={styles.deleteModalDescription}>
+              This label contains {peopleInDeletedLabel}{' '}
+              {peopleInDeletedLabel === 1 ? 'person' : 'people'}. Choose whether to
+              move them or delete them with the label.
+            </Text>
+
+            <View style={styles.fieldGroup}>
+              <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>
+                Move people to
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: isDeleteDestinationPickerOpen }}
+                onPress={() =>
+                  setIsDeleteDestinationPickerOpen((current) => !current)
+                }
+                style={({ pressed }) => [
+                  styles.labelSelect,
+                  pressed && styles.labelSelectPressed,
+                ]}>
+                <Text style={styles.labelSelectText}>
+                  {deleteDestinationLabelName}
+                </Text>
+                <SymbolView
+                  name={{
+                    ios: 'chevron.down',
+                    android: 'keyboard_arrow_down',
+                    web: 'keyboard_arrow_down',
+                  }}
+                  size={18}
+                  tintColor={theme.textMuted}
+                  style={{
+                    transform: [
+                      {
+                        rotate: isDeleteDestinationPickerOpen ? '180deg' : '0deg',
+                      },
+                    ],
+                  }}
+                />
+              </Pressable>
+              {isDeleteDestinationPickerOpen && (
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  style={styles.labelOptions}>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setDeleteDestinationLabelId(null);
+                      setIsDeleteDestinationPickerOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.labelOption,
+                      deleteDestinationLabelId === null && styles.labelOptionSelected,
+                      pressed && styles.labelOptionPressed,
+                    ]}>
+                    <Text style={styles.labelOptionText}>No Label</Text>
+                    {deleteDestinationLabelId === null && (
+                      <SymbolView
+                        name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                        size={17}
+                        tintColor={theme.accent}
+                      />
+                    )}
+                  </Pressable>
+                  {labels
+                    .filter((label) => label.id !== labelDeleteId)
+                    .map((label) => (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={label.id}
+                        onPress={() => {
+                          setDeleteDestinationLabelId(label.id);
+                          setIsDeleteDestinationPickerOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.labelOption,
+                          deleteDestinationLabelId === label.id &&
+                            styles.labelOptionSelected,
+                          pressed && styles.labelOptionPressed,
+                        ]}>
+                        <Text style={styles.labelOptionText}>{label.name}</Text>
+                        {deleteDestinationLabelId === label.id && (
+                          <SymbolView
+                            name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                            size={17}
+                            tintColor={theme.accent}
+                          />
+                        )}
+                      </Pressable>
+                    ))}
+                </ScrollView>
+              )}
+            </View>
+
+            <View style={styles.deleteDecisionActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => confirmLabelDeletion(false)}
+                style={({ pressed }) => [
+                  styles.moveAndDeleteButton,
+                  pressed && styles.saveButtonPressed,
+                ]}>
+                <Text style={styles.saveButtonText}>
+                  Move {peopleInDeletedLabel}{' '}
+                  {peopleInDeletedLabel === 1 ? 'person' : 'people'} & Delete Label
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => confirmLabelDeletion(true)}
+                style={({ pressed }) => [
+                  styles.deleteAllButton,
+                  pressed && styles.deleteButtonPressed,
+                ]}>
+                <Text style={styles.deleteButtonText}>
+                  Delete Label & {peopleInDeletedLabel}{' '}
+                  {peopleInDeletedLabel === 1 ? 'Person' : 'People'}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={cancelLabelDeletion}
+                style={({ pressed }) => [
+                  styles.deleteDialogCancelButton,
+                  pressed && styles.cancelButtonPressed,
+                ]}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -1140,12 +1377,30 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 22,
   },
+  modalHeaderCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 16,
+  },
   modalEyebrow: {
     color: theme.accent,
     fontSize: 10,
     fontWeight: '800',
     letterSpacing: 1.35,
     marginBottom: 4,
+  },
+  deleteModalEyebrow: {
+    color: theme.danger,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.35,
+    marginBottom: 4,
+  },
+  deleteModalDescription: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+    marginBottom: 20,
   },
   modalTitle: {
     color: theme.text,
@@ -1290,6 +1545,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     gap: 10,
     marginTop: 5,
   },
+  editorModalActions: {
+    flexWrap: 'nowrap',
+    gap: 6,
+  },
+  editorActionButton: {
+    flexShrink: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+  },
+  editorActionText: {
+    flexShrink: 1,
+    fontSize: 12,
+  },
   deleteButton: {
     minHeight: 46,
     paddingHorizontal: 13,
@@ -1310,6 +1578,34 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     color: theme.danger,
     fontSize: 14,
     fontWeight: '700',
+  },
+  deleteDecisionActions: {
+    gap: 10,
+    marginTop: 5,
+  },
+  moveAndDeleteButton: {
+    minHeight: 48,
+    paddingHorizontal: 16,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteAllButton: {
+    minHeight: 48,
+    paddingHorizontal: 16,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteDialogCancelButton: {
+    minHeight: 46,
+    paddingHorizontal: 18,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButton: {
     minHeight: 46,
