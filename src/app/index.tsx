@@ -59,15 +59,6 @@ const SAMPLE_PEOPLE: Person[] = [
   },
 ];
 
-function getInitials(name: string) {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase();
-}
-
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [collapsedLabelIds, setCollapsedLabelIds] = useState<Set<string>>(
@@ -198,9 +189,6 @@ export default function HomeScreen() {
                       <View
                         key={person.id}
                         style={[styles.personRow, index > 0 && styles.personDivider]}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>{getInitials(person.name)}</Text>
-                        </View>
                         <View style={styles.personCopy}>
                           <Text style={styles.personLine}>
                             <Text style={styles.personName}>{person.name}</Text>
@@ -433,23 +421,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   personDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: theme.border,
-  },
-  avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    backgroundColor: theme.backgroundRaised,
-    borderWidth: 1,
-    borderColor: theme.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    color: theme.accent,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.3,
   },
   personCopy: {
     flex: 1,
