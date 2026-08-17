@@ -1,6 +1,9 @@
+import type { LabelColor } from '@/constants/label-colors';
+
 export type Label = {
   id: string;
   name: string;
+  color: LabelColor;
   createdAt: number;
 };
 

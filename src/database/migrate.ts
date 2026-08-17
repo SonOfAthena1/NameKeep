@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -23,6 +23,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         CREATE TABLE labels (
           id TEXT PRIMARY KEY NOT NULL,
           name TEXT NOT NULL,
+          color TEXT NOT NULL DEFAULT 'green',
           created_at INTEGER NOT NULL
         );
 
@@ -65,6 +66,13 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
 
         CREATE INDEX people_label_created_at_idx
           ON people(label_id, created_at DESC);
+      `);
+    }
+
+    if (currentVersion === 1 || currentVersion === 2) {
+      await db.execAsync(`
+        ALTER TABLE labels
+          ADD COLUMN color TEXT NOT NULL DEFAULT 'green';
       `);
     }
 

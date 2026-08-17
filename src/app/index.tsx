@@ -14,14 +14,24 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import {
+  LABEL_COLOR_OPTIONS,
+  LabelColors,
+  type LabelColor,
+} from '@/constants/label-colors';
 import type { AppTheme } from '@/constants/theme';
 import type { Label, Person } from '@/database/types';
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
 
 const SAMPLE_LABELS: Label[] = [
-  { id: 'work', name: 'Work', createdAt: 1_755_907_200_000 },
-  { id: 'speech', name: 'Speech Class', createdAt: 1_753_315_200_000 },
-  { id: 'math', name: 'Math Class', createdAt: 1_748_736_000_000 },
+  { id: 'work', name: 'Work', color: 'green', createdAt: 1_755_907_200_000 },
+  {
+    id: 'speech',
+    name: 'Speech Class',
+    color: 'green',
+    createdAt: 1_753_315_200_000,
+  },
+  { id: 'math', name: 'Math Class', color: 'green', createdAt: 1_748_736_000_000 },
 ];
 
 const SAMPLE_PEOPLE: Person[] = [
@@ -83,6 +93,7 @@ export default function HomeScreen() {
   const [personLabelId, setPersonLabelId] = useState<string | null>(null);
   const [isLabelPickerOpen, setIsLabelPickerOpen] = useState(false);
   const [labelName, setLabelName] = useState('');
+  const [labelColor, setLabelColor] = useState<LabelColor>('green');
   const theme = useTheme();
   const { colorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -121,7 +132,12 @@ export default function HomeScreen() {
 
     if (unlabeledPeople.length > 0) {
       labeledSections.push({
-        label: { id: 'no-label', name: 'No Label', createdAt: Number.MIN_SAFE_INTEGER },
+        label: {
+          id: 'no-label',
+          name: 'No Label',
+          color: 'green',
+          createdAt: Number.MIN_SAFE_INTEGER,
+        },
         people: unlabeledPeople,
       });
     }
@@ -156,6 +172,7 @@ export default function HomeScreen() {
     setPersonDescription('');
     setPersonLabelId(null);
     setLabelName('');
+    setLabelColor('green');
   }
 
   function addPerson() {
@@ -183,6 +200,7 @@ export default function HomeScreen() {
       {
         id: `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: trimmedName,
+        color: labelColor,
         createdAt: Date.now(),
       },
     ]);
@@ -241,18 +259,24 @@ export default function HomeScreen() {
 
           {sections.map(({ label, people }) => {
             const isCollapsed = collapsedLabelIds.has(label.id);
+            const labelTheme = LabelColors[colorScheme][label.color];
 
             return (
-              <View key={label.id} style={styles.section}>
+              <View
+                key={label.id}
+                style={[styles.section, { borderColor: labelTheme.base }]}>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityState={{ expanded: !isCollapsed }}
                   onPress={() => toggleLabel(label.id)}
                   style={({ pressed }) => [
                     styles.sectionHeader,
-                    pressed && styles.sectionHeaderPressed,
+                    {
+                      backgroundColor: pressed ? labelTheme.pressed : labelTheme.base,
+                    },
                   ]}>
-                  <View style={styles.chevronBox}>
+                  <View
+                    style={[styles.chevronBox, { backgroundColor: labelTheme.foreground }]}>
                     <SymbolView
                       name={{
                         ios: 'chevron.right',
@@ -260,13 +284,18 @@ export default function HomeScreen() {
                         web: 'chevron_right',
                       }}
                       size={17}
-                      tintColor={theme.accent}
+                      tintColor={labelTheme.base}
                       style={{ transform: [{ rotate: isCollapsed ? '0deg' : '90deg' }] }}
                     />
                   </View>
-                  <Text style={styles.sectionTitle}>{label.name}</Text>
-                  <View style={styles.countPill}>
-                    <Text style={styles.countText}>{people.length}</Text>
+                  <Text style={[styles.sectionTitle, { color: labelTheme.foreground }]}>
+                    {label.name}
+                  </Text>
+                  <View
+                    style={[styles.countPill, { backgroundColor: labelTheme.foreground }]}>
+                    <Text style={[styles.countText, { color: labelTheme.base }]}>
+                      {people.length}
+                    </Text>
                   </View>
                 </Pressable>
 
@@ -526,6 +555,41 @@ export default function HomeScreen() {
                     style={styles.fieldInput}
                     value={labelName}
                   />
+                  <Text style={[styles.fieldLabel, styles.colorFieldLabel]}>Color</Text>
+                  <View style={styles.colorOptions}>
+                    {LABEL_COLOR_OPTIONS.map((option) => {
+                      const optionTheme = LabelColors[colorScheme][option.id];
+                      const isSelected = labelColor === option.id;
+
+                      return (
+                        <Pressable
+                          accessibilityLabel={`${option.name} label color`}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: isSelected }}
+                          key={option.id}
+                          onPress={() => setLabelColor(option.id)}
+                          style={({ pressed }) => [
+                            styles.colorOption,
+                            isSelected && styles.colorOptionSelected,
+                            pressed && styles.colorOptionPressed,
+                          ]}>
+                          <View
+                            style={[
+                              styles.colorSwatch,
+                              { backgroundColor: optionTheme.base },
+                            ]}>
+                            {isSelected && (
+                              <SymbolView
+                                name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                                size={18}
+                                tintColor={optionTheme.foreground}
+                              />
+                            )}
+                          </View>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
 
@@ -714,12 +778,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   sectionHeader: {
     minHeight: 48,
     paddingHorizontal: 15,
-    backgroundColor: theme.accent,
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  sectionHeaderPressed: {
-    backgroundColor: theme.accentStrong,
   },
   chevronBox: {
     width: 25,
@@ -953,6 +1013,38 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.background,
     color: theme.text,
     fontSize: 15,
+  },
+  colorFieldLabel: {
+    marginTop: 17,
+    marginBottom: 9,
+  },
+  colorOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  colorOption: {
+    width: 46,
+    height: 46,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorOptionSelected: {
+    borderColor: theme.text,
+  },
+  colorOptionPressed: {
+    backgroundColor: theme.backgroundElement,
+    transform: [{ scale: 0.96 }],
+  },
+  colorSwatch: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   descriptionInput: {
     minHeight: 64,
