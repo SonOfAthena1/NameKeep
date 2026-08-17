@@ -363,47 +363,48 @@ export default function HomeScreen() {
               <View
                 key={label.id}
                 style={[styles.section, { borderColor: labelTheme.base }]}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: !isCollapsed }}
-                  onPress={() => toggleLabel(label.id)}
-                  style={({ pressed }) => [
-                    styles.sectionHeader,
-                    {
-                      backgroundColor: pressed ? labelTheme.pressed : labelTheme.base,
-                    },
-                  ]}>
-                  <View
-                    style={[styles.chevronBox, { backgroundColor: labelTheme.foreground }]}>
-                    <SymbolView
-                      name={{
-                        ios: 'chevron.right',
-                        android: 'chevron_right',
-                        web: 'chevron_right',
-                      }}
-                      size={17}
-                      tintColor={labelTheme.base}
-                      style={{ transform: [{ rotate: isCollapsed ? '0deg' : '90deg' }] }}
-                    />
-                  </View>
-                  <Text style={[styles.sectionTitle, { color: labelTheme.foreground }]}>
-                    {label.name}
-                  </Text>
-                  <View
-                    style={[styles.countPill, { backgroundColor: labelTheme.foreground }]}>
-                    <Text style={[styles.countText, { color: labelTheme.base }]}>
-                      {people.length}
+                <View
+                  style={[styles.sectionHeader, { backgroundColor: labelTheme.base }]}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: !isCollapsed }}
+                    onPress={() => toggleLabel(label.id)}
+                    style={({ pressed }) => [
+                      styles.sectionToggle,
+                      label.id === 'no-label' && styles.sectionToggleWithoutEdit,
+                      {
+                        backgroundColor: pressed ? labelTheme.pressed : labelTheme.base,
+                      },
+                    ]}>
+                    <View
+                      style={[styles.chevronBox, { backgroundColor: labelTheme.foreground }]}>
+                      <SymbolView
+                        name={{
+                          ios: 'chevron.right',
+                          android: 'chevron_right',
+                          web: 'chevron_right',
+                        }}
+                        size={17}
+                        tintColor={labelTheme.base}
+                        style={{ transform: [{ rotate: isCollapsed ? '0deg' : '90deg' }] }}
+                      />
+                    </View>
+                    <Text style={[styles.sectionTitle, { color: labelTheme.foreground }]}>
+                      {label.name}
                     </Text>
-                  </View>
+                    <View
+                      style={[styles.countPill, { backgroundColor: labelTheme.foreground }]}>
+                      <Text style={[styles.countText, { color: labelTheme.base }]}>
+                        {people.length}
+                      </Text>
+                    </View>
+                  </Pressable>
                   {label.id !== 'no-label' && (
                     <Pressable
                       accessibilityLabel={`Edit ${label.name} label`}
                       accessibilityRole="button"
                       hitSlop={10}
-                      onPress={(event) => {
-                        event.stopPropagation();
-                        openLabelEditor(label);
-                      }}
+                      onPress={() => openLabelEditor(label)}
                       style={({ pressed }) => [
                         styles.labelEditButton,
                         pressed && styles.editButtonPressed,
@@ -415,7 +416,7 @@ export default function HomeScreen() {
                       />
                     </Pressable>
                   )}
-                </Pressable>
+                </View>
 
                 {!isCollapsed && people.length > 0 && (
                   <View style={styles.peopleList}>
@@ -932,9 +933,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sectionHeader: {
     minHeight: 48,
-    paddingHorizontal: 15,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  sectionToggle: {
+    flex: 1,
+    minHeight: 48,
+    paddingLeft: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sectionToggleWithoutEdit: {
+    paddingRight: 15,
   },
   chevronBox: {
     width: 25,
@@ -970,6 +980,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     width: 18,
     height: 18,
     marginLeft: 11,
+    marginRight: 15,
     alignItems: 'center',
     justifyContent: 'center',
   },
