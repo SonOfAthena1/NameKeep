@@ -10,22 +10,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { AppTheme } from '@/constants/theme';
 import type { Label, Person } from '@/database/types';
-
-const PALETTE = {
-  background: '#061A12',
-  backgroundRaised: '#09251A',
-  surface: '#0D3021',
-  surfacePressed: '#12452E',
-  border: '#1B5A3B',
-  borderSoft: '#123F2A',
-  accent: '#45E37F',
-  accentStrong: '#20BE61',
-  accentDark: '#08753A',
-  text: '#ECFFF2',
-  textMuted: '#91CBA6',
-  textFaint: '#649577',
-} as const;
+import { useAppTheme, useTheme } from '@/hooks/use-theme';
 
 const SAMPLE_LABELS: Label[] = [
   { id: 'work', name: 'Work', createdAt: 1_755_907_200_000 },
@@ -85,6 +72,9 @@ export default function HomeScreen() {
   const [collapsedLabelIds, setCollapsedLabelIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const theme = useTheme();
+  const { colorScheme } = useAppTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -122,7 +112,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.screen}>
-      <StatusBar style="light" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <View pointerEvents="none" style={styles.glowTop} />
       <View pointerEvents="none" style={styles.glowBottom} />
 
@@ -136,7 +126,6 @@ export default function HomeScreen() {
           </View>
 
           <Text style={styles.title}>People you’ve met</Text>
-          <Text style={styles.subtitle}>Names, context, remembered.</Text>
         </View>
 
         <View style={styles.searchBox}>
@@ -151,9 +140,9 @@ export default function HomeScreen() {
             clearButtonMode="while-editing"
             onChangeText={setSearch}
             placeholder="Search people..."
-            placeholderTextColor={PALETTE.textFaint}
+            placeholderTextColor={theme.textFaint}
             returnKeyType="search"
-            selectionColor={PALETTE.accent}
+            selectionColor={theme.accent}
             style={styles.searchInput}
             value={search}
           />
@@ -233,10 +222,10 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: PALETTE.background,
+    backgroundColor: theme.background,
     overflow: 'hidden',
   },
   safeArea: {
@@ -250,7 +239,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: '#0B6B39',
+    backgroundColor: theme.glowTop,
     opacity: 0.18,
     top: -190,
     right: -120,
@@ -260,7 +249,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: '#08753A',
+    backgroundColor: theme.glowBottom,
     opacity: 0.1,
     bottom: -170,
     left: -150,
@@ -280,31 +269,31 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 9,
-    backgroundColor: PALETTE.accent,
+    backgroundColor: theme.accent,
     alignItems: 'center',
     justifyContent: 'center',
     transform: [{ rotate: '-4deg' }],
   },
   brandInitial: {
-    color: PALETTE.background,
+    color: theme.background,
     fontSize: 18,
     fontWeight: '900',
   },
   brandName: {
-    color: PALETTE.text,
+    color: theme.text,
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: -0.3,
   },
   title: {
-    color: PALETTE.text,
+    color: theme.text,
     fontSize: 32,
     lineHeight: 37,
     fontWeight: '800',
     letterSpacing: -1.1,
   },
   subtitle: {
-    color: PALETTE.textMuted,
+    color: theme.textMuted,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 5,
@@ -314,8 +303,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: PALETTE.border,
-    backgroundColor: PALETTE.backgroundRaised,
+    borderColor: theme.border,
+    backgroundColor: theme.backgroundRaised,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 17,
@@ -331,14 +320,14 @@ const styles = StyleSheet.create({
     height: 13,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: PALETTE.textMuted,
+    borderColor: theme.textMuted,
   },
   searchHandle: {
     position: 'absolute',
     width: 7,
     height: 2,
     borderRadius: 1,
-    backgroundColor: PALETTE.textMuted,
+    backgroundColor: theme.textMuted,
     transform: [{ rotate: '45deg' }],
     right: 1,
     bottom: 3,
@@ -346,7 +335,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: '100%',
-    color: PALETTE.text,
+    color: theme.text,
     fontSize: 16,
     paddingVertical: 0,
   },
@@ -362,21 +351,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   listHeading: {
-    color: PALETTE.textFaint,
+    color: theme.textFaint,
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1.5,
   },
   peopleCount: {
-    color: PALETTE.textFaint,
+    color: theme.textFaint,
     fontSize: 12,
     fontWeight: '600',
   },
   section: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: PALETTE.borderSoft,
-    backgroundColor: PALETTE.surface,
+    borderColor: theme.borderSoft,
+    backgroundColor: theme.surface,
     marginBottom: 13,
     overflow: 'hidden',
   },
@@ -387,19 +376,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionHeaderPressed: {
-    backgroundColor: PALETTE.surfacePressed,
+    backgroundColor: theme.surfacePressed,
   },
   chevronBox: {
     width: 29,
     height: 29,
     borderRadius: 10,
-    backgroundColor: PALETTE.accentDark,
+    backgroundColor: theme.accentMuted,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   chevron: {
-    color: PALETTE.accent,
+    color: theme.accent,
     fontSize: 23,
     lineHeight: 24,
     fontWeight: '700',
@@ -407,7 +396,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     flex: 1,
-    color: PALETTE.text,
+    color: theme.text,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: -0.25,
@@ -417,12 +406,12 @@ const styles = StyleSheet.create({
     height: 25,
     borderRadius: 13,
     paddingHorizontal: 8,
-    backgroundColor: PALETTE.backgroundRaised,
+    backgroundColor: theme.backgroundRaised,
     alignItems: 'center',
     justifyContent: 'center',
   },
   countText: {
-    color: PALETTE.textMuted,
+    color: theme.textMuted,
     fontSize: 12,
     fontWeight: '800',
   },
@@ -438,21 +427,21 @@ const styles = StyleSheet.create({
   },
   personDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: PALETTE.border,
+    borderTopColor: theme.border,
   },
   avatar: {
     width: 38,
     height: 38,
     borderRadius: 13,
-    backgroundColor: PALETTE.backgroundRaised,
+    backgroundColor: theme.backgroundRaised,
     borderWidth: 1,
-    borderColor: PALETTE.border,
+    borderColor: theme.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   avatarText: {
-    color: PALETTE.accent,
+    color: theme.accent,
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.3,
@@ -462,13 +451,13 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   personName: {
-    color: PALETTE.text,
+    color: theme.text,
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: -0.15,
   },
   personDescription: {
-    color: PALETTE.textMuted,
+    color: theme.textMuted,
     fontSize: 13,
     lineHeight: 18,
   },
@@ -478,12 +467,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   emptyTitle: {
-    color: PALETTE.text,
+    color: theme.text,
     fontSize: 17,
     fontWeight: '700',
   },
   emptyText: {
-    color: PALETTE.textMuted,
+    color: theme.textMuted,
     fontSize: 14,
     marginTop: 6,
   },
@@ -494,23 +483,23 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 21,
-    backgroundColor: PALETTE.accent,
+    backgroundColor: theme.accent,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#74F1A3',
-    shadowColor: '#000000',
+    borderColor: theme.buttonBorder,
+    shadowColor: theme.shadow,
     shadowOffset: { width: 0, height: 9 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 8,
   },
   addButtonPressed: {
-    backgroundColor: PALETTE.accentStrong,
+    backgroundColor: theme.accentStrong,
     transform: [{ scale: 0.96 }],
   },
   addButtonText: {
-    color: PALETTE.background,
+    color: theme.background,
     fontSize: 31,
     lineHeight: 34,
     fontWeight: '500',

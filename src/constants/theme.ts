@@ -9,21 +9,52 @@ import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    background: '#F6FBF8',
+    backgroundRaised: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfacePressed: '#E8F5ED',
+    backgroundElement: '#E8F5ED',
+    backgroundSelected: '#D6EBDD',
+    border: '#B8D8C4',
+    borderSoft: '#D7EADF',
+    accent: '#128044',
+    accentStrong: '#0F713D',
+    accentMuted: '#DDF4E6',
+    text: '#102018',
+    textSecondary: '#4F6F5C',
+    textMuted: '#4F6F5C',
+    textFaint: '#587765',
+    glowTop: '#65C78B',
+    glowBottom: '#8BD7A7',
+    buttonBorder: '#128246',
+    shadow: '#173D28',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    background: '#061A12',
+    backgroundRaised: '#09251A',
+    surface: '#0D3021',
+    surfacePressed: '#12452E',
+    backgroundElement: '#0D3021',
+    backgroundSelected: '#12452E',
+    border: '#1B5A3B',
+    borderSoft: '#123F2A',
+    accent: '#45E37F',
+    accentStrong: '#20BE61',
+    accentMuted: '#08753A',
+    text: '#ECFFF2',
+    textSecondary: '#91CBA6',
+    textMuted: '#91CBA6',
+    textFaint: '#649577',
+    glowTop: '#0B6B39',
+    glowBottom: '#08753A',
+    buttonBorder: '#74F1A3',
+    shadow: '#000000',
   },
 } as const;
 
+export const DefaultColorScheme = 'light' as const;
+export type AppColorScheme = keyof typeof Colors;
+export type AppTheme = (typeof Colors)[AppColorScheme];
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
 export const Fonts = Platform.select({
