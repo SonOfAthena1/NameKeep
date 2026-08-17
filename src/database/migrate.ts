@@ -17,9 +17,9 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     return;
   }
 
-  await db.withExclusiveTransactionAsync(async (transaction) => {
+  await db.withTransactionAsync(async () => {
     if (currentVersion === 0) {
-      await transaction.execAsync(`
+      await db.execAsync(`
         CREATE TABLE labels (
           id TEXT PRIMARY KEY NOT NULL,
           name TEXT NOT NULL,
@@ -43,6 +43,6 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       `);
     }
 
-    await transaction.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
+    await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
   });
 }
