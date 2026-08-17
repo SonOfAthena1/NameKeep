@@ -20,6 +20,11 @@ import {
   LabelColors,
   type LabelColor,
 } from '@/constants/label-colors';
+import {
+  SettingsScreen,
+  type SortOrder,
+  type TrashedPerson,
+} from '@/components/settings-screen';
 import type { AppTheme } from '@/constants/theme';
 import type { Label, Person } from '@/database/types';
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
@@ -78,6 +83,28 @@ const DESCRIPTION_MAX_LENGTH = 180;
 const LABEL_MAX_LENGTH = 40;
 const CONTROL_CORNER_RADIUS = 14;
 
+function sortByOrder<T extends { name: string; createdAt: number }>(
+  items: T[],
+  order: SortOrder,
+) {
+  return [...items].sort((a, b) => {
+    if (order === 'alphabetical') {
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    }
+    return order === 'oldest'
+      ? a.createdAt - b.createdAt
+      : b.createdAt - a.createdAt;
+  });
+}
+
+function formatShortDate(timestamp: number) {
+  const date = new Date(timestamp);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}/${day}/${year}`;
+}
+
 type Editor = {
   kind: 'person' | 'label';
   id: string | null;
@@ -87,6 +114,16 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [labels, setLabels] = useState<Label[]>(SAMPLE_LABELS);
   const [people, setPeople] = useState<Person[]>(SAMPLE_PEOPLE);
+  const [trash, setTrash] = useState<TrashedPerson[]>([]);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [defaultLabelColor, setDefaultLabelColor] =
+    useState<LabelColor>('green');
+  const [defaultLabelId, setDefaultLabelId] = useState<string | null>(null);
+  const [labelSortOrder, setLabelSortOrder] =
+    useState<SortOrder>('newest');
+  const [peopleSortOrder, setPeopleSortOrder] =
+    useState<SortOrder>('newest');
+  const [showDate, setShowDate] = useState(false);
   const [collapsedLabelIds, setCollapsedLabelIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -111,8 +148,7 @@ export default function HomeScreen() {
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
 
-    const labeledSections = [...labels]
-      .sort((a, b) => b.createdAt - a.createdAt)
+    const labeledSections = sortByOrder(labels, labelSortOrder)
       .map((label) => {
         const labelMatches = label.name.toLocaleLowerCase().includes(query);
         const sectionPeople = people.filter((person) => person.labelId === label.id)
@@ -123,9 +159,9 @@ export default function HomeScreen() {
               person.name.toLocaleLowerCase().includes(query) ||
               person.description.toLocaleLowerCase().includes(query),
           )
-          .sort((a, b) => b.createdAt - a.createdAt);
+        const sortedPeople = sortByOrder(sectionPeople, peopleSortOrder);
 
-        return { label, people: sectionPeople };
+        return { label, people: sortedPeople };
       })
       .filter(({ people: sectionPeople }) => !query || sectionPeople.length > 0);
 
@@ -138,9 +174,9 @@ export default function HomeScreen() {
           person.name.toLocaleLowerCase().includes(query) ||
           person.description.toLocaleLowerCase().includes(query),
       )
-      .sort((a, b) => b.createdAt - a.createdAt);
+    const sortedUnlabeledPeople = sortByOrder(unlabeledPeople, peopleSortOrder);
 
-    if (unlabeledPeople.length > 0) {
+    if (sortedUnlabeledPeople.length > 0) {
       labeledSections.push({
         label: {
           id: 'no-label',
@@ -148,12 +184,12 @@ export default function HomeScreen() {
           color: 'green',
           createdAt: Number.MIN_SAFE_INTEGER,
         },
-        people: unlabeledPeople,
+        people: sortedUnlabeledPeople,
       });
     }
 
     return labeledSections;
-  }, [labels, people, search]);
+  }, [labelSortOrder, labels, people, peopleSortOrder, search]);
 
   const selectedLabelName =
     labels.find((label) => label.id === personLabelId)?.name ?? 'No Label';
@@ -164,6 +200,9 @@ export default function HomeScreen() {
   const peopleInDeletedLabel = people.filter(
     (person) => person.labelId === labelDeleteId,
   ).length;
+  const areAllVisibleSectionsCollapsed =
+    sections.length > 0 &&
+    sections.every(({ label }) => collapsedLabelIds.has(label.id));
 
   function toggleLabel(labelId: string) {
     setCollapsedLabelIds((current) => {
@@ -177,8 +216,35 @@ export default function HomeScreen() {
     });
   }
 
+  function toggleAllLabels() {
+    const visibleLabelIds = sections.map(({ label }) => label.id);
+    setCollapsedLabelIds((current) => {
+      const next = new Set(current);
+      if (areAllVisibleSectionsCollapsed) {
+        visibleLabelIds.forEach((labelId) => next.delete(labelId));
+      } else {
+        visibleLabelIds.forEach((labelId) => next.add(labelId));
+      }
+      return next;
+    });
+  }
+
+  function openSettings() {
+    setIsAddMenuOpen(false);
+    setIsSettingsOpen(true);
+  }
+
   function openCreateModal(kind: 'person' | 'label') {
     setIsAddMenuOpen(false);
+    if (kind === 'person') {
+      setPersonLabelId(
+        labels.some((label) => label.id === defaultLabelId)
+          ? defaultLabelId
+          : null,
+      );
+    } else {
+      setLabelColor(defaultLabelColor);
+    }
     setEditor({ kind, id: null });
   }
 
@@ -204,7 +270,7 @@ export default function HomeScreen() {
     setPersonDescription('');
     setPersonLabelId(null);
     setLabelName('');
-    setLabelColor('green');
+    setLabelColor(defaultLabelColor);
   }
 
   function savePerson() {
@@ -277,12 +343,17 @@ export default function HomeScreen() {
 
     const itemName =
       people.find((person) => person.id === id)?.name || 'this person';
-    const message = `Delete “${itemName}”? This cannot be undone.`;
+    const message = `Move “${itemName}” to Trash? You can restore them later.`;
 
     const performDelete = () => {
-      setPeople((current) =>
-        current.filter((person) => person.id !== id),
-      );
+      const deletedPerson = people.find((person) => person.id === id);
+      if (deletedPerson) {
+        setTrash((currentTrash) => [
+          { ...deletedPerson, deletedAt: Date.now() },
+          ...currentTrash,
+        ]);
+      }
+      setPeople((current) => current.filter((person) => person.id !== id));
       closeEditor();
     };
 
@@ -294,12 +365,12 @@ export default function HomeScreen() {
     }
 
     Alert.alert(
-      'Delete person?',
+      'Move to Trash?',
       message,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Move to Trash',
           style: 'destructive',
           onPress: performDelete,
         },
@@ -327,15 +398,28 @@ export default function HomeScreen() {
     }
 
     const deletedLabelId = labelDeleteId;
-    setPeople((current) =>
-      deletePeople
-        ? current.filter((person) => person.labelId !== deletedLabelId)
-        : current.map((person) =>
+    if (deletePeople) {
+      const deletedPeople = people.filter(
+        (person) => person.labelId === deletedLabelId,
+      );
+      if (deletedPeople.length > 0) {
+        const deletedAt = Date.now();
+        setTrash((currentTrash) => [
+          ...deletedPeople.map((person) => ({ ...person, deletedAt })),
+          ...currentTrash,
+        ]);
+      }
+    }
+    setPeople((current) => {
+      if (deletePeople) {
+        return current.filter((person) => person.labelId !== deletedLabelId);
+      }
+      return current.map((person) =>
             person.labelId === deletedLabelId
               ? { ...person, labelId: deleteDestinationLabelId }
               : person,
-          ),
-    );
+          );
+    });
     setLabels((current) =>
       current.filter((label) => label.id !== deletedLabelId),
     );
@@ -344,7 +428,51 @@ export default function HomeScreen() {
       next.delete(deletedLabelId);
       return next;
     });
+    if (defaultLabelId === deletedLabelId) {
+      setDefaultLabelId(null);
+    }
     closeLabelDeleteDialog();
+  }
+
+  function restorePerson(personId: string) {
+    const restoredPerson = trash.find((person) => person.id === personId);
+    if (!restoredPerson) return;
+
+    const { deletedAt: _deletedAt, ...person } = restoredPerson;
+    const restoredLabelId = labels.some((label) => label.id === person.labelId)
+      ? person.labelId
+      : null;
+    setPeople((current) => [
+      ...current,
+      { ...person, labelId: restoredLabelId },
+    ]);
+    setTrash((current) => current.filter((item) => item.id !== personId));
+  }
+
+  function deletePersonForever(personId: string) {
+    setTrash((current) => current.filter((person) => person.id !== personId));
+  }
+
+  if (isSettingsOpen) {
+    return (
+      <SettingsScreen
+        defaultLabelColor={defaultLabelColor}
+        defaultLabelId={defaultLabelId}
+        labelSortOrder={labelSortOrder}
+        labels={labels}
+        onBack={() => setIsSettingsOpen(false)}
+        onDeleteForever={deletePersonForever}
+        onRestore={restorePerson}
+        peopleSortOrder={peopleSortOrder}
+        setDefaultLabelColor={setDefaultLabelColor}
+        setDefaultLabelId={setDefaultLabelId}
+        setLabelSortOrder={setLabelSortOrder}
+        setPeopleSortOrder={setPeopleSortOrder}
+        setShowDate={setShowDate}
+        showDate={showDate}
+        trash={trash}
+      />
+    );
   }
 
   return (
@@ -365,24 +493,40 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.searchBox}>
-          <View style={styles.searchIcon}>
-            <View style={styles.searchLens} />
-            <View style={styles.searchHandle} />
+        <View style={styles.searchRow}>
+          <View style={styles.searchBox}>
+            <View style={styles.searchIcon}>
+              <View style={styles.searchLens} />
+              <View style={styles.searchHandle} />
+            </View>
+            <TextInput
+              accessibilityLabel="Search people"
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              onChangeText={setSearch}
+              placeholder="Search people..."
+              placeholderTextColor={theme.textFaint}
+              returnKeyType="search"
+              selectionColor={theme.accent}
+              style={styles.searchInput}
+              value={search}
+            />
           </View>
-          <TextInput
-            accessibilityLabel="Search people"
-            autoCapitalize="none"
-            autoCorrect={false}
-            clearButtonMode="while-editing"
-            onChangeText={setSearch}
-            placeholder="Search people..."
-            placeholderTextColor={theme.textFaint}
-            returnKeyType="search"
-            selectionColor={theme.accent}
-            style={styles.searchInput}
-            value={search}
-          />
+          <Pressable
+            accessibilityLabel="Open settings"
+            accessibilityRole="button"
+            onPress={openSettings}
+            style={({ pressed }) => [
+              styles.settingsButton,
+              pressed && styles.settingsButtonPressed,
+            ]}>
+            <SymbolView
+              name={{ ios: 'gearshape', android: 'settings', web: 'settings' }}
+              size={21}
+              tintColor={theme.textSecondary}
+            />
+          </Pressable>
         </View>
 
         <ScrollView
@@ -391,7 +535,43 @@ export default function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.listHeadingRow}>
-            <Text style={styles.listHeading}>YOUR LABELS</Text>
+            <View style={styles.listHeadingLabelGroup}>
+              {sections.length > 0 && (
+                <Pressable
+                  accessibilityLabel={
+                    areAllVisibleSectionsCollapsed
+                      ? 'Open all labels'
+                      : 'Collapse all labels'
+                  }
+                  accessibilityRole="button"
+                  hitSlop={9}
+                  onPress={toggleAllLabels}
+                  style={({ pressed }) => [
+                    styles.collapseAllButton,
+                    pressed && styles.collapseAllButtonPressed,
+                  ]}>
+                  <SymbolView
+                    name={{
+                      ios: 'chevron.right',
+                      android: 'chevron_right',
+                      web: 'chevron_right',
+                    }}
+                    size={17}
+                    tintColor={theme.accent}
+                    style={{
+                      transform: [
+                        {
+                          rotate: areAllVisibleSectionsCollapsed
+                            ? '0deg'
+                            : '90deg',
+                        },
+                      ],
+                    }}
+                  />
+                </Pressable>
+              )}
+              <Text style={styles.listHeading}>YOUR LABELS</Text>
+            </View>
             <Text style={styles.peopleCount}>
               {people.length} {people.length === 1 ? 'person' : 'people'}
             </Text>
@@ -474,6 +654,11 @@ export default function HomeScreen() {
                             {!!person.description && (
                               <Text style={styles.personDescription}>
                                 {' '}— {person.description}
+                              </Text>
+                            )}
+                            {showDate && (
+                              <Text style={styles.personDate}>
+                                {' '}({formatShortDate(person.createdAt)})
                               </Text>
                             )}
                           </Text>
@@ -979,8 +1164,9 @@ export default function HomeScreen() {
                   pressed && styles.deleteAllButtonPressed,
                 ]}>
                 <Text style={styles.deleteAllButtonText}>
-                  Delete Label & {peopleInDeletedLabel}{' '}
+                  Delete Label & Move {peopleInDeletedLabel}{' '}
                   {peopleInDeletedLabel === 1 ? 'Person' : 'People'}
+                  {' '}to Trash
                 </Text>
               </Pressable>
               <Pressable
@@ -1079,9 +1265,15 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     lineHeight: 22,
     marginTop: 5,
   },
-  searchBox: {
-    height: 54,
+  searchRow: {
     marginHorizontal: 24,
+    marginBottom: 24,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  searchBox: {
+    flex: 1,
+    height: 48,
     borderRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
     borderColor: theme.border,
@@ -1089,7 +1281,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 17,
-    marginBottom: 24,
+  },
+  settingsButton: {
+    width: 48,
+    height: 48,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.backgroundRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingsButtonPressed: {
+    backgroundColor: theme.surfacePressed,
+    transform: [{ scale: 0.97 }],
   },
   searchIcon: {
     width: 20,
@@ -1130,6 +1335,23 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 11,
     paddingHorizontal: 2,
+  },
+  listHeadingLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  collapseAllButton: {
+    width: 25,
+    height: 25,
+    marginRight: 10,
+    borderRadius: 8,
+    backgroundColor: theme.accentMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  collapseAllButtonPressed: {
+    backgroundColor: theme.backgroundSelected,
+    opacity: 0.72,
   },
   listHeading: {
     color: theme.textFaint,
@@ -1245,6 +1467,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   personDescription: {
     color: theme.textDescription,
     fontSize: 13,
+    lineHeight: 18,
+  },
+  personDate: {
+    color: theme.textFaint,
+    fontSize: 12,
     lineHeight: 18,
   },
   emptyState: {
