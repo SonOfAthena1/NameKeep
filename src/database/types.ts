@@ -8,6 +8,6 @@ export type Person = {
   id: string;
   name: string;
   description: string;
-  labelId: string;
+  labelId: string | null;
   createdAt: number;
 };

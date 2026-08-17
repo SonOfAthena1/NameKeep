@@ -2,6 +2,9 @@ import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -59,11 +62,27 @@ const SAMPLE_PEOPLE: Person[] = [
   },
 ];
 
+const NAME_MAX_LENGTH = 40;
+const DESCRIPTION_MAX_LENGTH = 180;
+const LABEL_MAX_LENGTH = 40;
+const CONTROL_CORNER_RADIUS = 14;
+
+type CreateModal = 'person' | 'label' | null;
+
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
+  const [labels, setLabels] = useState<Label[]>(SAMPLE_LABELS);
+  const [people, setPeople] = useState<Person[]>(SAMPLE_PEOPLE);
   const [collapsedLabelIds, setCollapsedLabelIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const [createModal, setCreateModal] = useState<CreateModal>(null);
+  const [personName, setPersonName] = useState('');
+  const [personDescription, setPersonDescription] = useState('');
+  const [personLabelId, setPersonLabelId] = useState<string | null>(null);
+  const [isLabelPickerOpen, setIsLabelPickerOpen] = useState(false);
+  const [labelName, setLabelName] = useState('');
   const theme = useTheme();
   const { colorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -71,11 +90,11 @@ export default function HomeScreen() {
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
 
-    return [...SAMPLE_LABELS]
+    const labeledSections = [...labels]
       .sort((a, b) => b.createdAt - a.createdAt)
       .map((label) => {
         const labelMatches = label.name.toLocaleLowerCase().includes(query);
-        const people = SAMPLE_PEOPLE.filter((person) => person.labelId === label.id)
+        const sectionPeople = people.filter((person) => person.labelId === label.id)
           .filter(
             (person) =>
               !query ||
@@ -85,10 +104,33 @@ export default function HomeScreen() {
           )
           .sort((a, b) => b.createdAt - a.createdAt);
 
-        return { label, people };
+        return { label, people: sectionPeople };
       })
-      .filter(({ people }) => !query || people.length > 0);
-  }, [search]);
+      .filter(({ people: sectionPeople }) => !query || sectionPeople.length > 0);
+
+    const unlabeledPeople = people
+      .filter((person) => person.labelId === null)
+      .filter(
+        (person) =>
+          !query ||
+          'no label'.includes(query) ||
+          person.name.toLocaleLowerCase().includes(query) ||
+          person.description.toLocaleLowerCase().includes(query),
+      )
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    if (unlabeledPeople.length > 0) {
+      labeledSections.push({
+        label: { id: 'no-label', name: 'No Label', createdAt: Number.MIN_SAFE_INTEGER },
+        people: unlabeledPeople,
+      });
+    }
+
+    return labeledSections;
+  }, [labels, people, search]);
+
+  const selectedLabelName =
+    labels.find((label) => label.id === personLabelId)?.name ?? 'No Label';
 
   function toggleLabel(labelId: string) {
     setCollapsedLabelIds((current) => {
@@ -100,6 +142,51 @@ export default function HomeScreen() {
       }
       return next;
     });
+  }
+
+  function openCreateModal(modal: Exclude<CreateModal, null>) {
+    setIsAddMenuOpen(false);
+    setCreateModal(modal);
+  }
+
+  function closeCreateModal() {
+    setCreateModal(null);
+    setIsLabelPickerOpen(false);
+    setPersonName('');
+    setPersonDescription('');
+    setPersonLabelId(null);
+    setLabelName('');
+  }
+
+  function addPerson() {
+    setPeople((current) => [
+      ...current,
+      {
+        id: `person-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: personName.trim(),
+        description: personDescription.trim(),
+        labelId: personLabelId,
+        createdAt: Date.now(),
+      },
+    ]);
+    closeCreateModal();
+  }
+
+  function addLabel() {
+    const trimmedName = labelName.trim();
+    if (!trimmedName) {
+      return;
+    }
+
+    setLabels((current) => [
+      ...current,
+      {
+        id: `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: trimmedName,
+        createdAt: Date.now(),
+      },
+    ]);
+    closeCreateModal();
   }
 
   return (
@@ -148,7 +235,7 @@ export default function HomeScreen() {
           <View style={styles.listHeadingRow}>
             <Text style={styles.listHeading}>YOUR LABELS</Text>
             <Text style={styles.peopleCount}>
-              {SAMPLE_PEOPLE.length} {SAMPLE_PEOPLE.length === 1 ? 'person' : 'people'}
+              {people.length} {people.length === 1 ? 'person' : 'people'}
             </Text>
           </View>
 
@@ -191,8 +278,14 @@ export default function HomeScreen() {
                         style={[styles.personRow, index > 0 && styles.personDivider]}>
                         <View style={styles.personCopy}>
                           <Text style={styles.personLine}>
-                            <Text style={styles.personName}>{person.name}</Text>
-                            <Text style={styles.personDescription}> — {person.description}</Text>
+                            <Text style={styles.personName}>
+                              {person.name || 'Unnamed person'}
+                            </Text>
+                            {!!person.description && (
+                              <Text style={styles.personDescription}>
+                                {' '}— {person.description}
+                              </Text>
+                            )}
                           </Text>
                         </View>
                       </View>
@@ -211,13 +304,258 @@ export default function HomeScreen() {
           )}
         </ScrollView>
 
+        {isAddMenuOpen && (
+          <View style={styles.addMenu}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => openCreateModal('person')}
+              style={({ pressed }) => [
+                styles.addMenuButton,
+                pressed && styles.addMenuButtonPressed,
+              ]}>
+              <SymbolView
+                name={{ ios: 'person.badge.plus', android: 'person_add', web: 'person_add' }}
+                size={20}
+                tintColor={theme.accent}
+              />
+              <Text style={styles.addMenuButtonText}>New Person</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => openCreateModal('label')}
+              style={({ pressed }) => [
+                styles.addMenuButton,
+                pressed && styles.addMenuButtonPressed,
+              ]}>
+              <SymbolView
+                name={{ ios: 'tag.fill', android: 'label', web: 'label' }}
+                size={19}
+                tintColor={theme.accent}
+              />
+              <Text style={styles.addMenuButtonText}>New Label</Text>
+            </Pressable>
+          </View>
+        )}
+
         <Pressable
-          accessibilityLabel="Add a person"
+          accessibilityLabel={isAddMenuOpen ? 'Close add menu' : 'Open add menu'}
           accessibilityRole="button"
+          accessibilityState={{ expanded: isAddMenuOpen }}
+          onPress={() => setIsAddMenuOpen((current) => !current)}
           style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
-          <Text style={styles.addButtonText}>＋</Text>
+          <Text style={[styles.addButtonText, isAddMenuOpen && styles.addButtonTextOpen]}>＋</Text>
         </Pressable>
       </SafeAreaView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeCreateModal}
+        presentationStyle="overFullScreen"
+        transparent
+        visible={createModal !== null}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalKeyboardView}>
+          <Pressable
+            accessibilityLabel="Close dialog"
+            onPress={closeCreateModal}
+            style={styles.modalBackdrop}>
+            <Pressable
+              accessibilityRole="none"
+              onPress={(event) => event.stopPropagation()}
+              style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalEyebrow}>ADD TO NAMEKEEP</Text>
+                  <Text style={styles.modalTitle}>
+                    {createModal === 'person' ? 'New Person' : 'New Label'}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Close dialog"
+                  accessibilityRole="button"
+                  hitSlop={10}
+                  onPress={closeCreateModal}
+                  style={({ pressed }) => [
+                    styles.modalCloseButton,
+                    pressed && styles.modalCloseButtonPressed,
+                  ]}>
+                  <SymbolView
+                    name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                    size={18}
+                    tintColor={theme.textMuted}
+                  />
+                </Pressable>
+              </View>
+
+              {createModal === 'person' ? (
+                <>
+                  <View style={styles.fieldGroup}>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Name</Text>
+                      <Text style={styles.characterCount}>
+                        {personName.length}/{NAME_MAX_LENGTH}
+                      </Text>
+                    </View>
+                    <TextInput
+                      autoCapitalize="words"
+                      maxLength={NAME_MAX_LENGTH}
+                      onChangeText={setPersonName}
+                      placeholder="Their name (if you know it)"
+                      placeholderTextColor={theme.textFaint}
+                      selectionColor={theme.accent}
+                      style={styles.fieldInput}
+                      value={personName}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <View style={styles.fieldLabelRow}>
+                      <Text style={styles.fieldLabel}>Description</Text>
+                      <Text style={styles.characterCount}>
+                        {personDescription.length}/{DESCRIPTION_MAX_LENGTH}
+                      </Text>
+                    </View>
+                    <TextInput
+                      maxLength={DESCRIPTION_MAX_LENGTH}
+                      multiline
+                      onChangeText={setPersonDescription}
+                      placeholder="Where you met, what they look like, or anything memorable"
+                      placeholderTextColor={theme.textFaint}
+                      selectionColor={theme.accent}
+                      style={[styles.fieldInput, styles.descriptionInput]}
+                      textAlignVertical="top"
+                      value={personDescription}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>Label</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: isLabelPickerOpen }}
+                      onPress={() => setIsLabelPickerOpen((current) => !current)}
+                      style={({ pressed }) => [
+                        styles.labelSelect,
+                        pressed && styles.labelSelectPressed,
+                      ]}>
+                      <Text style={styles.labelSelectText}>{selectedLabelName}</Text>
+                      <SymbolView
+                        name={{
+                          ios: 'chevron.down',
+                          android: 'keyboard_arrow_down',
+                          web: 'keyboard_arrow_down',
+                        }}
+                        size={18}
+                        tintColor={theme.textMuted}
+                        style={{
+                          transform: [{ rotate: isLabelPickerOpen ? '180deg' : '0deg' }],
+                        }}
+                      />
+                    </Pressable>
+                    {isLabelPickerOpen && (
+                      <ScrollView
+                        keyboardShouldPersistTaps="handled"
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator={false}
+                        style={styles.labelOptions}>
+                        <Pressable
+                          onPress={() => {
+                            setPersonLabelId(null);
+                            setIsLabelPickerOpen(false);
+                          }}
+                          style={({ pressed }) => [
+                            styles.labelOption,
+                            personLabelId === null && styles.labelOptionSelected,
+                            pressed && styles.labelOptionPressed,
+                          ]}>
+                          <Text style={styles.labelOptionText}>No Label</Text>
+                          {personLabelId === null && (
+                            <SymbolView
+                              name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                              size={17}
+                              tintColor={theme.accent}
+                            />
+                          )}
+                        </Pressable>
+                        {labels.map((label) => (
+                          <Pressable
+                            key={label.id}
+                            onPress={() => {
+                              setPersonLabelId(label.id);
+                              setIsLabelPickerOpen(false);
+                            }}
+                            style={({ pressed }) => [
+                              styles.labelOption,
+                              personLabelId === label.id && styles.labelOptionSelected,
+                              pressed && styles.labelOptionPressed,
+                            ]}>
+                            <Text style={styles.labelOptionText}>{label.name}</Text>
+                            {personLabelId === label.id && (
+                              <SymbolView
+                                name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                                size={17}
+                                tintColor={theme.accent}
+                              />
+                            )}
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+                </>
+              ) : (
+                <View style={styles.fieldGroup}>
+                  <View style={styles.fieldLabelRow}>
+                    <Text style={styles.fieldLabel}>Label name</Text>
+                    <Text style={styles.characterCount}>
+                      {labelName.length}/{LABEL_MAX_LENGTH}
+                    </Text>
+                  </View>
+                  <TextInput
+                    autoCapitalize="words"
+                    autoFocus
+                    maxLength={LABEL_MAX_LENGTH}
+                    onChangeText={setLabelName}
+                    onSubmitEditing={addLabel}
+                    placeholder="For example, Work or Biology"
+                    placeholderTextColor={theme.textFaint}
+                    returnKeyType="done"
+                    selectionColor={theme.accent}
+                    style={styles.fieldInput}
+                    value={labelName}
+                  />
+                </View>
+              )}
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={closeCreateModal}
+                  style={({ pressed }) => [
+                    styles.cancelButton,
+                    pressed && styles.cancelButtonPressed,
+                  ]}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={createModal === 'label' && !labelName.trim()}
+                  onPress={createModal === 'person' ? addPerson : addLabel}
+                  style={({ pressed }) => [
+                    styles.saveButton,
+                    createModal === 'label' && !labelName.trim() && styles.saveButtonDisabled,
+                    pressed && styles.saveButtonPressed,
+                  ]}>
+                  <Text style={styles.saveButtonText}>
+                    {createModal === 'person' ? 'Add Person' : 'Add Label'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -304,7 +642,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   searchBox: {
     height: 54,
     marginHorizontal: 24,
-    borderRadius: 14,
+    borderRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
     borderColor: theme.border,
     backgroundColor: theme.backgroundRaised,
@@ -365,7 +703,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: '600',
   },
   section: {
-    borderRadius: 14,
+    borderRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
     borderColor: theme.accent,
     backgroundColor: theme.surface,
@@ -466,7 +804,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     bottom: 24,
     width: 60,
     height: 60,
-    borderRadius: 21,
+    borderRadius: CONTROL_CORNER_RADIUS,
     backgroundColor: theme.accent,
     alignItems: 'center',
     justifyContent: 'center',
@@ -488,5 +826,227 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     lineHeight: 34,
     fontWeight: '500',
     marginTop: -2,
+  },
+  addButtonTextOpen: {
+    transform: [{ rotate: '45deg' }],
+  },
+  addMenu: {
+    position: 'absolute',
+    right: 24,
+    bottom: 96,
+    gap: 9,
+    alignItems: 'flex-end',
+  },
+  addMenuButton: {
+    minWidth: 154,
+    height: 49,
+    paddingHorizontal: 17,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.backgroundRaised,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  addMenuButtonPressed: {
+    backgroundColor: theme.surfacePressed,
+    transform: [{ scale: 0.98 }],
+  },
+  addMenuButtonText: {
+    color: theme.text,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalKeyboardView: {
+    flex: 1,
+  },
+  modalBackdrop: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 32,
+    backgroundColor: 'rgba(3, 18, 11, 0.58)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '92%',
+    padding: 22,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.backgroundRaised,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.32,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 22,
+  },
+  modalEyebrow: {
+    color: theme.accent,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.35,
+    marginBottom: 4,
+  },
+  modalTitle: {
+    color: theme.text,
+    fontSize: 25,
+    lineHeight: 30,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  modalCloseButton: {
+    width: 34,
+    height: 34,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    backgroundColor: theme.backgroundElement,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseButtonPressed: {
+    backgroundColor: theme.backgroundSelected,
+  },
+  fieldGroup: {
+    marginBottom: 17,
+  },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 7,
+  },
+  fieldLabel: {
+    color: theme.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  fieldLabelStandalone: {
+    marginBottom: 7,
+  },
+  characterCount: {
+    color: theme.textFaint,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  fieldInput: {
+    minHeight: 49,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    color: theme.text,
+    fontSize: 15,
+  },
+  descriptionInput: {
+    minHeight: 94,
+    maxHeight: 130,
+  },
+  labelSelect: {
+    minHeight: 49,
+    paddingHorizontal: 14,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  labelSelectPressed: {
+    backgroundColor: theme.surfacePressed,
+  },
+  labelSelectText: {
+    color: theme.text,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  labelOptions: {
+    marginTop: 7,
+    maxHeight: 190,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+    overflow: 'hidden',
+  },
+  labelOption: {
+    minHeight: 42,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.borderSoft,
+  },
+  labelOptionSelected: {
+    backgroundColor: theme.accentMuted,
+  },
+  labelOptionPressed: {
+    backgroundColor: theme.surfacePressed,
+  },
+  labelOptionText: {
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 5,
+  },
+  cancelButton: {
+    minHeight: 46,
+    paddingHorizontal: 18,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButtonPressed: {
+    backgroundColor: theme.surfacePressed,
+  },
+  cancelButtonText: {
+    color: theme.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  saveButton: {
+    minHeight: 46,
+    minWidth: 112,
+    paddingHorizontal: 18,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonPressed: {
+    backgroundColor: theme.accentStrong,
+    transform: [{ scale: 0.98 }],
+  },
+  saveButtonDisabled: {
+    opacity: 0.45,
+  },
+  saveButtonText: {
+    color: theme.background,
+    fontSize: 14,
+    fontWeight: '800',
   },
 });
