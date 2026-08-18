@@ -78,9 +78,9 @@ const SAMPLE_PEOPLE: Person[] = [
   },
 ];
 
-const NAME_MAX_LENGTH = 24;
-const DESCRIPTION_MAX_LENGTH = 80;
-const LABEL_MAX_LENGTH = 24;
+const NAME_MAX_LENGTH = 30;
+const DESCRIPTION_MAX_LENGTH = 100;
+const LABEL_MAX_LENGTH = 30;
 const CONTROL_CORNER_RADIUS = 14;
 
 function sortByOrder<T extends { name: string; createdAt: number }>(
@@ -464,6 +464,7 @@ export default function HomeScreen() {
         labels={labels}
         onBack={() => setIsSettingsOpen(false)}
         onDeleteForever={deletePersonForever}
+        onEmptyTrash={() => setTrash([])}
         onRestore={restorePerson}
         peopleSortOrder={peopleSortOrder}
         setDefaultLabelColor={setDefaultLabelColor}
@@ -634,7 +635,12 @@ export default function HomeScreen() {
                         style={{ transform: [{ rotate: isCollapsed ? '0deg' : '90deg' }] }}
                       />
                     </View>
-                    <Text style={[styles.sectionTitle, { color: labelTheme.foreground }]}>
+                    <Text
+                      style={[
+                        styles.sectionTitle,
+                        condensedView && styles.sectionTitleCondensed,
+                        { color: labelTheme.foreground },
+                      ]}>
                       {label.name}
                     </Text>
                       <View
@@ -642,6 +648,7 @@ export default function HomeScreen() {
                       <Text
                         style={[
                           styles.countText,
+                          condensedView && styles.countTextCondensed,
                           { color: labelTheme.foreground },
                         ]}>
                         {people.length}
@@ -1464,6 +1471,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.25,
   },
+  sectionTitleCondensed: {
+    fontWeight: '400',
+    letterSpacing: 0,
+  },
   countPill: {
     minWidth: 22,
     paddingLeft: 7,
@@ -1473,6 +1484,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   countText: {
     fontSize: 15,
     fontWeight: '800',
+  },
+  countTextCondensed: {
+    fontWeight: '400',
   },
   labelEditButton: {
     width: 18,

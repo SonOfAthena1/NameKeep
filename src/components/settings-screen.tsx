@@ -44,6 +44,7 @@ type SettingsScreenProps = {
   trash: TrashedPerson[];
   onRestore: (personId: string) => void;
   onDeleteForever: (personId: string) => void;
+  onEmptyTrash: () => void;
   onBack: () => void;
 };
 
@@ -76,6 +77,7 @@ export function SettingsScreen({
   trash,
   onRestore,
   onDeleteForever,
+  onEmptyTrash,
   onBack,
 }: SettingsScreenProps) {
   const theme = useTheme();
@@ -116,6 +118,20 @@ export function SettingsScreen({
     ]);
   }
 
+  function confirmEmptyTrash() {
+    const message = `Permanently delete all ${trash.length} ${trash.length === 1 ? 'person' : 'people'} in Trash? This cannot be undone.`;
+
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm(message)) onEmptyTrash();
+      return;
+    }
+
+    Alert.alert('Empty Trash?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Empty Trash', style: 'destructive', onPress: onEmptyTrash },
+    ]);
+  }
+
   if (showTrash) {
     return (
       <ScreenFrame styles={styles}>
@@ -131,7 +147,12 @@ export function SettingsScreen({
             </View>
           ) : (
             <>
-              <Text style={styles.trashHelper}>Deleted people stay here until you restore or permanently delete them.</Text>
+              <View style={styles.trashIntroRow}>
+                <Text style={styles.trashHelper}>Deleted people stay here until you restore or permanently delete them.</Text>
+                <Pressable accessibilityRole="button" onPress={confirmEmptyTrash} style={({ pressed }) => [styles.emptyTrashButton, pressed && styles.pressed]}>
+                  <Text style={styles.emptyTrashButtonText}>Empty Trash</Text>
+                </Pressable>
+              </View>
               <View style={styles.groupCard}>
                 {trash.map((person, index) => (
                   <View key={person.id} style={[styles.trashRow, index > 0 && styles.rowDivider]}>
@@ -275,7 +296,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   colorChoiceSelected: { borderColor: theme.text },
   colorSwatch: { width: 33, height: 33, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   trashContent: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 50 },
-  trashHelper: { color: theme.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 14 },
+  trashIntroRow: { marginBottom: 14, gap: 11, alignItems: 'flex-start' },
+  trashHelper: { color: theme.textMuted, fontSize: 13, lineHeight: 19 },
+  emptyTrashButton: { minHeight: 36, paddingHorizontal: 13, borderRadius: 11, borderWidth: 1, borderColor: theme.danger, alignItems: 'center', justifyContent: 'center' },
+  emptyTrashButtonText: { color: theme.danger, fontSize: 13, fontWeight: '800' },
   trashRow: { minHeight: 72, paddingHorizontal: 15, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 9 },
   trashCopy: { flex: 1, minWidth: 0 },
   restoreButton: { height: 36, paddingHorizontal: 12, borderRadius: 11, backgroundColor: theme.accentMuted, alignItems: 'center', justifyContent: 'center' },
