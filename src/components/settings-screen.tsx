@@ -2,9 +2,10 @@ import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import {
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -101,6 +102,7 @@ export function SettingsScreen({
   const [showTrash, setShowTrash] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isImportGuideOpen, setIsImportGuideOpen] = useState(false);
 
   const defaultLabelName =
     labels.find((label) => label.id === defaultLabelId)?.name ?? 'None';
@@ -271,6 +273,17 @@ export function SettingsScreen({
     }
   }
 
+  function chooseImportFile() {
+    setIsImportGuideOpen(false);
+    if (Platform.OS === 'web') {
+      void importPeople();
+      return;
+    }
+
+    // Let the guide finish dismissing before presenting the native file picker.
+    setTimeout(() => void importPeople(), 200);
+  }
+
   if (showTrash) {
     return (
       <ScreenFrame styles={styles}>
@@ -294,18 +307,21 @@ export function SettingsScreen({
               </View>
               <View style={styles.groupCard}>
                 {trash.map((person, index) => (
-                  <View key={person.id} style={[styles.trashRow, index > 0 && styles.rowDivider]}>
-                    <View style={styles.trashCopy}>
-                      <Text style={styles.rowTitle}>{person.name || 'Unnamed person'}</Text>
-                      {!!person.description && <Text numberOfLines={2} style={styles.rowSubtitle}>{person.description}</Text>}
+                  <Fragment key={person.id}>
+                    {index > 0 && <View style={styles.rowDivider} />}
+                    <View style={styles.trashRow}>
+                      <View style={styles.trashCopy}>
+                        <Text style={styles.rowTitle}>{person.name || 'Unnamed person'}</Text>
+                        {!!person.description && <Text numberOfLines={2} style={styles.rowSubtitle}>{person.description}</Text>}
+                      </View>
+                      <Pressable accessibilityRole="button" onPress={() => onRestore(person.id)} style={({ pressed }) => [styles.restoreButton, pressed && styles.pressed]}>
+                        <Text style={styles.restoreButtonText}>Restore</Text>
+                      </Pressable>
+                      <Pressable accessibilityLabel={`Delete ${person.name || 'person'} forever`} accessibilityRole="button" hitSlop={8} onPress={() => confirmDeleteForever(person)} style={({ pressed }) => [styles.foreverButton, pressed && styles.pressed]}>
+                        <SymbolView name={{ ios: 'trash', android: 'delete_forever', web: 'delete_forever' }} size={18} tintColor={theme.danger} />
+                      </Pressable>
                     </View>
-                    <Pressable accessibilityRole="button" onPress={() => onRestore(person.id)} style={({ pressed }) => [styles.restoreButton, pressed && styles.pressed]}>
-                      <Text style={styles.restoreButtonText}>Restore</Text>
-                    </Pressable>
-                    <Pressable accessibilityLabel={`Delete ${person.name || 'person'} forever`} accessibilityRole="button" hitSlop={8} onPress={() => confirmDeleteForever(person)} style={({ pressed }) => [styles.foreverButton, pressed && styles.pressed]}>
-                      <SymbolView name={{ ios: 'trash', android: 'delete_forever', web: 'delete_forever' }} size={18} tintColor={theme.danger} />
-                    </Pressable>
-                  </View>
+                  </Fragment>
                 ))}
               </View>
             </>
@@ -377,13 +393,100 @@ export function SettingsScreen({
         </Section>
 
         <Section title="DATA" styles={styles}>
-          <SettingRow title="Export people" subtitle="Share active people and labels as a CSV file" value={isExporting ? 'Preparing…' : undefined} disabled={isExporting} onPress={exportPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' }} size={20} tintColor={theme.accent} />} />
+          <SettingRow title="Export people" subtitle="Choose where to save or share a CSV file" value={isExporting ? 'Preparing…' : undefined} disabled={isExporting} onPress={exportPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
-          <SettingRow title="Import people" subtitle="Add people and labels from a CSV file" value={isImporting ? 'Reading…' : undefined} disabled={isImporting} onPress={importPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }} size={20} tintColor={theme.accent} />} />
+          <SettingRow title="Import people" subtitle="Add people and labels from a CSV file" value={isImporting ? 'Reading…' : undefined} disabled={isImporting} onPress={() => setIsImportGuideOpen(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
           <SettingRow title="Trash" subtitle="View, restore, or permanently delete people" value={trash.length ? String(trash.length) : undefined} onPress={() => setShowTrash(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'trash', android: 'delete', web: 'delete' }} size={20} tintColor={theme.danger} />} />
         </Section>
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setIsImportGuideOpen(false)}
+        transparent
+        visible={isImportGuideOpen}>
+        <View style={styles.importGuideBackdrop}>
+          <Pressable
+            accessibilityLabel="Close import guide"
+            accessibilityRole="button"
+            onPress={() => setIsImportGuideOpen(false)}
+            style={StyleSheet.absoluteFill}
+          />
+          <View
+            style={styles.importGuideCard}>
+            <View style={styles.importGuideHeader}>
+              <View style={styles.importGuideTitleGroup}>
+                <Text style={styles.importGuideEyebrow}>CSV IMPORT</Text>
+                <Text style={styles.importGuideTitle}>Prepare your file</Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close import guide"
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => setIsImportGuideOpen(false)}
+                style={({ pressed }) => [
+                  styles.importGuideClose,
+                  pressed && styles.pressed,
+                ]}>
+                <SymbolView
+                  name={{ ios: 'xmark', android: 'close', web: 'close' }}
+                  size={18}
+                  tintColor={theme.textSecondary}
+                />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.importGuideContent}
+              showsVerticalScrollIndicator={false}>
+              <Text style={styles.importGuideIntro}>
+                Choose a CSV file with one person per row. It should follow this format:
+              </Text>
+
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.csvExample}>
+                <Text selectable style={styles.csvExampleText}>
+                  {'name,description,label,label_color\nMaya Chen,Frontend developer,Work,green\nJordan Lee,,Friends,blue'}
+                </Text>
+              </ScrollView>
+
+              <Text style={styles.importRulesTitle}>Rules</Text>
+              <View style={styles.importRules}>
+                <Text style={styles.importRule}>• The file must end in .csv and be no larger than 2 MB.</Text>
+                <Text style={styles.importRule}>• The first row must contain a name column.</Text>
+                <Text style={styles.importRule}>• Description, label, and label_color are optional.</Text>
+                <Text style={styles.importRule}>• Valid colors: green, blue, violet, pink, red, orange, amber, teal, and gray.</Text>
+                <Text style={styles.importRule}>• Put values containing commas inside double quotes.</Text>
+                <Text style={styles.importRule}>• Existing labels are reused and exact duplicate people are skipped.</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.importGuideActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setIsImportGuideOpen(false)}
+                style={({ pressed }) => [
+                  styles.importGuideCancel,
+                  pressed && styles.rowPressed,
+                ]}>
+                <Text style={styles.importGuideCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={chooseImportFile}
+                style={({ pressed }) => [
+                  styles.importGuideChoose,
+                  pressed && styles.pressed,
+                ]}>
+                <Text style={styles.importGuideChooseText}>Choose CSV file</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenFrame>
   );
 }
@@ -439,6 +542,25 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   colorChoice: { width: 45, height: 45, borderRadius: 13, borderWidth: 2, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   colorChoiceSelected: { borderColor: theme.text },
   colorSwatch: { width: 33, height: 33, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  importGuideBackdrop: { flex: 1, paddingHorizontal: 20, paddingVertical: 30, backgroundColor: 'rgba(3, 18, 11, 0.62)', alignItems: 'center', justifyContent: 'center' },
+  importGuideCard: { width: '100%', maxWidth: 540, maxHeight: '90%', borderRadius: 18, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundRaised, overflow: 'hidden', shadowColor: theme.shadow, shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.32, shadowRadius: 28, elevation: 16 },
+  importGuideHeader: { paddingHorizontal: 20, paddingTop: 19, paddingBottom: 14, flexDirection: 'row', alignItems: 'flex-start', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.borderSoft },
+  importGuideTitleGroup: { flex: 1, minWidth: 0 },
+  importGuideEyebrow: { color: theme.accent, fontSize: 10, fontWeight: '800', letterSpacing: 1.35, marginBottom: 4 },
+  importGuideTitle: { color: theme.text, fontSize: 20, lineHeight: 25, fontWeight: '800', letterSpacing: -0.4 },
+  importGuideClose: { width: 34, height: 34, marginLeft: 12, borderRadius: 11, backgroundColor: theme.backgroundElement, alignItems: 'center', justifyContent: 'center' },
+  importGuideContent: { paddingHorizontal: 20, paddingTop: 17, paddingBottom: 19 },
+  importGuideIntro: { color: theme.textSecondary, fontSize: 14, lineHeight: 21, marginBottom: 12 },
+  csvExample: { borderRadius: 12, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.background, marginBottom: 18 },
+  csvExampleText: { minWidth: '100%', paddingHorizontal: 13, paddingVertical: 12, color: theme.text, fontSize: 12, lineHeight: 19, fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', web: 'monospace' }) },
+  importRulesTitle: { color: theme.text, fontSize: 14, fontWeight: '800', marginBottom: 8 },
+  importRules: { gap: 6 },
+  importRule: { color: theme.textMuted, fontSize: 13, lineHeight: 19 },
+  importGuideActions: { paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', justifyContent: 'flex-end', gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.borderSoft },
+  importGuideCancel: { minHeight: 44, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: theme.border, alignItems: 'center', justifyContent: 'center' },
+  importGuideCancelText: { color: theme.textSecondary, fontSize: 14, fontWeight: '700' },
+  importGuideChoose: { minHeight: 44, paddingHorizontal: 17, borderRadius: 12, backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center' },
+  importGuideChooseText: { color: theme.background, fontSize: 14, fontWeight: '800' },
   trashContent: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 50 },
   trashIntroRow: { marginBottom: 14, gap: 11, alignItems: 'flex-start' },
   trashHelper: { color: theme.textMuted, fontSize: 13, lineHeight: 19 },

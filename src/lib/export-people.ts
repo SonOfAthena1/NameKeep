@@ -7,6 +7,21 @@ function getExportFileName(): string {
   return `namekeep-people-${date}.csv`;
 }
 
+type SaveFilePickerWindow = Window & {
+  showSaveFilePicker?: (options: {
+    suggestedName: string;
+    types: {
+      description: string;
+      accept: Record<string, string[]>;
+    }[];
+  }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob) => Promise<void>;
+      close: () => Promise<void>;
+    }>;
+  }>;
+};
+
 function downloadOnWeb(contents: string, fileName: string): void {
   const url = URL.createObjectURL(
     new Blob([contents], { type: 'text/csv;charset=utf-8' }),
@@ -21,11 +36,39 @@ function downloadOnWeb(contents: string, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
+async function saveOnWeb(contents: string, fileName: string): Promise<void> {
+  const saveFilePicker = (window as SaveFilePickerWindow).showSaveFilePicker;
+  if (!saveFilePicker) {
+    downloadOnWeb(contents, fileName);
+    return;
+  }
+
+  try {
+    const handle = await saveFilePicker.call(window, {
+      suggestedName: fileName,
+      types: [
+        {
+          description: 'CSV file',
+          accept: { 'text/csv': ['.csv'] },
+        },
+      ],
+    });
+    const writable = await handle.createWritable();
+    await writable.write(
+      new Blob([contents], { type: 'text/csv;charset=utf-8' }),
+    );
+    await writable.close();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return;
+    throw error;
+  }
+}
+
 export async function exportPeopleCsv(contents: string): Promise<void> {
   const fileName = getExportFileName();
 
   if (Platform.OS === 'web') {
-    downloadOnWeb(contents, fileName);
+    await saveOnWeb(contents, fileName);
     return;
   }
 
