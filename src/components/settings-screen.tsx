@@ -1,5 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useMemo, useState } from 'react';
 import {
   Alert,
@@ -22,6 +24,12 @@ import type { AppTheme } from '@/constants/theme';
 import type { Label, Person } from '@/database/types';
 import { useAppTheme, useTheme, type ThemePreference } from '@/hooks/use-theme';
 import { exportPeopleCsv } from '@/lib/export-people';
+import {
+  CsvImportError,
+  MAX_CSV_FILE_SIZE,
+  createPeopleImportPlan,
+  parsePeopleCsv,
+} from '@/lib/import-people';
 import { createPeopleCsv } from '@/lib/people-csv';
 
 export type SortOrder = 'newest' | 'oldest' | 'alphabetical';
@@ -48,6 +56,7 @@ type SettingsScreenProps = {
   onRestore: (personId: string) => void;
   onDeleteForever: (personId: string) => void;
   onEmptyTrash: () => void;
+  onImportPeople: (people: Person[], labels: Label[]) => void;
   onBack: () => void;
 };
 
@@ -82,6 +91,7 @@ export function SettingsScreen({
   onRestore,
   onDeleteForever,
   onEmptyTrash,
+  onImportPeople,
   onBack,
 }: SettingsScreenProps) {
   const theme = useTheme();
@@ -90,6 +100,7 @@ export function SettingsScreen({
   const [picker, setPicker] = useState<Picker>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const defaultLabelName =
     labels.find((label) => label.id === defaultLabelId)?.name ?? 'None';
@@ -156,6 +167,107 @@ export function SettingsScreen({
       );
     } finally {
       setIsExporting(false);
+    }
+  }
+
+  function showMessage(title: string, message: string) {
+    if (Platform.OS === 'web') {
+      globalThis.alert(`${title}\n\n${message}`);
+      return;
+    }
+    Alert.alert(title, message);
+  }
+
+  async function importPeople() {
+    if (isImporting) return;
+
+    setIsImporting(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'text/csv',
+          'text/comma-separated-values',
+          'application/csv',
+          'application/vnd.ms-excel',
+          'text/plain',
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      if (!asset.name.toLocaleLowerCase().endsWith('.csv')) {
+        throw new CsvImportError('Please choose a file ending in .csv.');
+      }
+      if (asset.size !== undefined && asset.size > MAX_CSV_FILE_SIZE) {
+        throw new CsvImportError('The CSV file is larger than 2 MB.');
+      }
+
+      const contents =
+        Platform.OS === 'web' && asset.file
+          ? await asset.file.text()
+          : await new File(asset.uri).text();
+      if (contents.length > MAX_CSV_FILE_SIZE) {
+        throw new CsvImportError('The CSV file is larger than 2 MB.');
+      }
+
+      const plan = createPeopleImportPlan(
+        parsePeopleCsv(contents),
+        people,
+        labels,
+        defaultLabelColor,
+      );
+      if (plan.people.length === 0) {
+        const details = [
+          plan.duplicateCount
+            ? `${plan.duplicateCount} exact ${plan.duplicateCount === 1 ? 'duplicate was' : 'duplicates were'} skipped.`
+            : '',
+          plan.invalidRows.length
+            ? `${plan.invalidRows.length} invalid ${plan.invalidRows.length === 1 ? 'row was' : 'rows were'} skipped.`
+            : '',
+        ].filter(Boolean).join('\n');
+        showMessage('Nothing to import', details || 'No people were found in the CSV.');
+        return;
+      }
+
+      const summary = [
+        `Add ${plan.people.length} ${plan.people.length === 1 ? 'person' : 'people'} to NameKeep?`,
+        `${plan.labels.length} new ${plan.labels.length === 1 ? 'label' : 'labels'}`,
+        plan.duplicateCount
+          ? `${plan.duplicateCount} exact ${plan.duplicateCount === 1 ? 'duplicate' : 'duplicates'} will be skipped`
+          : '',
+        plan.invalidRows.length
+          ? `${plan.invalidRows.length} invalid ${plan.invalidRows.length === 1 ? 'row' : 'rows'} will be skipped (lines ${plan.invalidRows.slice(0, 5).join(', ')}${plan.invalidRows.length > 5 ? ', …' : ''})`
+          : '',
+      ].filter(Boolean).join('\n\n');
+
+      const performImport = () => {
+        onImportPeople(plan.people, plan.labels);
+        showMessage(
+          'Import complete',
+          `${plan.people.length} ${plan.people.length === 1 ? 'person was' : 'people were'} added.`,
+        );
+      };
+
+      if (Platform.OS === 'web') {
+        if (globalThis.confirm(summary)) performImport();
+      } else {
+        Alert.alert('Review import', summary, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Import', onPress: performImport },
+        ]);
+      }
+    } catch (error) {
+      console.error('Could not import people', error);
+      showMessage(
+        error instanceof CsvImportError ? 'Cannot import CSV' : 'Import failed',
+        error instanceof CsvImportError
+          ? error.message
+          : 'NameKeep could not read the CSV file. Please try again.',
+      );
+    } finally {
+      setIsImporting(false);
     }
   }
 
@@ -266,6 +378,8 @@ export function SettingsScreen({
 
         <Section title="DATA" styles={styles}>
           <SettingRow title="Export people" subtitle="Share active people and labels as a CSV file" value={isExporting ? 'Preparing…' : undefined} disabled={isExporting} onPress={exportPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' }} size={20} tintColor={theme.accent} />} />
+          <View style={styles.rowDivider} />
+          <SettingRow title="Import people" subtitle="Add people and labels from a CSV file" value={isImporting ? 'Reading…' : undefined} disabled={isImporting} onPress={importPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
           <SettingRow title="Trash" subtitle="View, restore, or permanently delete people" value={trash.length ? String(trash.length) : undefined} onPress={() => setShowTrash(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'trash', android: 'delete', web: 'delete' }} size={20} tintColor={theme.danger} />} />
         </Section>

@@ -21,6 +21,11 @@ import {
   type LabelColor,
 } from '@/constants/label-colors';
 import {
+  DESCRIPTION_MAX_LENGTH,
+  LABEL_MAX_LENGTH,
+  NAME_MAX_LENGTH,
+} from '@/constants/data-limits';
+import {
   SettingsScreen,
   type SortOrder,
   type TrashedPerson,
@@ -78,9 +83,6 @@ const SAMPLE_PEOPLE: Person[] = [
   },
 ];
 
-const NAME_MAX_LENGTH = 30;
-const DESCRIPTION_MAX_LENGTH = 100;
-const LABEL_MAX_LENGTH = 30;
 const CONTROL_CORNER_RADIUS = 14;
 
 function sortByOrder<T extends { name: string; createdAt: number }>(
@@ -454,6 +456,11 @@ export default function HomeScreen() {
     setTrash((current) => current.filter((person) => person.id !== personId));
   }
 
+  function importPeople(importedPeople: Person[], importedLabels: Label[]) {
+    setLabels((current) => [...current, ...importedLabels]);
+    setPeople((current) => [...current, ...importedPeople]);
+  }
+
   if (isSettingsOpen) {
     return (
       <SettingsScreen
@@ -466,6 +473,7 @@ export default function HomeScreen() {
         onBack={() => setIsSettingsOpen(false)}
         onDeleteForever={deletePersonForever}
         onEmptyTrash={() => setTrash([])}
+        onImportPeople={importPeople}
         onRestore={restorePerson}
         peopleSortOrder={peopleSortOrder}
         setDefaultLabelColor={setDefaultLabelColor}
