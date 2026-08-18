@@ -1,7 +1,9 @@
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSQLiteContext } from 'expo-sqlite';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Modal,
@@ -31,6 +33,12 @@ import {
   type TrashedPerson,
 } from '@/components/settings-screen';
 import type { AppTheme } from '@/constants/theme';
+import { listActiveLabels } from '@/database/labels-repository';
+import {
+  listActivePeople,
+  listTrashedPeople,
+} from '@/database/people-repository';
+import { getSettings } from '@/database/settings-repository';
 import type { Label, Person } from '@/database/types';
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
 
@@ -144,9 +152,83 @@ export default function HomeScreen() {
   >(null);
   const [isDeleteDestinationPickerOpen, setIsDeleteDestinationPickerOpen] =
     useState(false);
+  const [isDatabaseLoading, setIsDatabaseLoading] = useState(true);
+  const [databaseLoadError, setDatabaseLoadError] = useState<string | null>(null);
+  const [databaseLoadAttempt, setDatabaseLoadAttempt] = useState(0);
+  const db = useSQLiteContext();
   const theme = useTheme();
-  const { colorScheme } = useAppTheme();
+  const { colorScheme, setThemePreference } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDatabaseState() {
+      setIsDatabaseLoading(true);
+      setDatabaseLoadError(null);
+
+      try {
+        const [storedLabels, storedPeople, storedTrash, settings] =
+          await Promise.all([
+            listActiveLabels(db),
+            listActivePeople(db),
+            listTrashedPeople(db),
+            getSettings(db),
+          ]);
+        if (cancelled) return;
+
+        const loadedLabels: Label[] = storedLabels.map((label) => ({
+          id: label.id,
+          name: label.name,
+          color: label.color,
+          createdAt: label.createdAt,
+        }));
+        const loadedPeople: Person[] = storedPeople.map((person) => ({
+          id: person.id,
+          name: person.name,
+          description: person.description,
+          labelId: person.labelId,
+          createdAt: person.createdAt,
+        }));
+        const loadedTrash: TrashedPerson[] = storedTrash.map((person) => ({
+          id: person.id,
+          name: person.name,
+          description: person.description,
+          labelId: person.labelId,
+          createdAt: person.createdAt,
+          deletedAt: person.deletedAt,
+        }));
+
+        setLabels(loadedLabels);
+        setPeople(loadedPeople);
+        setTrash(loadedTrash);
+        setDefaultLabelColor(settings.defaultLabelColor);
+        setDefaultLabelId(
+          loadedLabels.some((label) => label.id === settings.defaultLabelId)
+            ? settings.defaultLabelId
+            : null,
+        );
+        setLabelSortOrder(settings.labelSortOrder);
+        setPeopleSortOrder(settings.peopleSortOrder);
+        setShowDate(settings.showDate);
+        setCondensedView(settings.condensedView);
+        setThemePreference(settings.themePreference);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Could not load database state', error);
+        setDatabaseLoadError(
+          error instanceof Error ? error.message : 'Unknown database error',
+        );
+      } finally {
+        if (!cancelled) setIsDatabaseLoading(false);
+      }
+    }
+
+    void loadDatabaseState();
+    return () => {
+      cancelled = true;
+    };
+  }, [databaseLoadAttempt, db, setThemePreference]);
 
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -459,6 +541,51 @@ export default function HomeScreen() {
   function importPeople(importedPeople: Person[], importedLabels: Label[]) {
     setLabels((current) => [...current, ...importedLabels]);
     setPeople((current) => [...current, ...importedPeople]);
+  }
+
+  if (isDatabaseLoading) {
+    return (
+      <View style={styles.screen}>
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+        <View pointerEvents="none" style={styles.glowTop} />
+        <SafeAreaView style={styles.databaseStateScreen}>
+          <ActivityIndicator color={theme.accent} size="large" />
+          <Text style={styles.databaseStateTitle}>Loading NameKeep</Text>
+          <Text style={styles.databaseStateText}>Opening your saved people…</Text>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  if (databaseLoadError) {
+    return (
+      <View style={styles.screen}>
+        <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+        <View pointerEvents="none" style={styles.glowTop} />
+        <SafeAreaView style={styles.databaseStateScreen}>
+          <View style={styles.databaseErrorIcon}>
+            <SymbolView
+              name={{ ios: 'exclamationmark.triangle', android: 'warning', web: 'warning' }}
+              size={25}
+              tintColor={theme.danger}
+            />
+          </View>
+          <Text style={styles.databaseStateTitle}>Couldn’t load your data</Text>
+          <Text style={styles.databaseStateText}>
+            NameKeep couldn’t open its database. Your saved data has not been changed.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setDatabaseLoadAttempt((attempt) => attempt + 1)}
+            style={({ pressed }) => [
+              styles.databaseRetryButton,
+              pressed && styles.databaseRetryButtonPressed,
+            ]}>
+            <Text style={styles.databaseRetryButtonText}>Try Again</Text>
+          </Pressable>
+        </SafeAreaView>
+      </View>
+    );
   }
 
   if (isSettingsOpen) {
@@ -1261,6 +1388,56 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     width: '100%',
     maxWidth: 720,
     alignSelf: 'center',
+  },
+  databaseStateScreen: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  databaseStateTitle: {
+    color: theme.text,
+    fontSize: 19,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginTop: 17,
+  },
+  databaseStateText: {
+    maxWidth: 340,
+    color: theme.textMuted,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    marginTop: 7,
+  },
+  databaseErrorIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 17,
+    backgroundColor: theme.backgroundElement,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  databaseRetryButton: {
+    minHeight: 45,
+    paddingHorizontal: 20,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    backgroundColor: theme.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+  },
+  databaseRetryButtonPressed: {
+    backgroundColor: theme.accentStrong,
+    transform: [{ scale: 0.98 }],
+  },
+  databaseRetryButtonText: {
+    color: theme.background,
+    fontSize: 14,
+    fontWeight: '800',
   },
   glowTop: {
     position: 'absolute',
