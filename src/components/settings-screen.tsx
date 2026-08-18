@@ -57,7 +57,7 @@ type SettingsScreenProps = {
   onRestore: (personId: string) => void;
   onDeleteForever: (personId: string) => void;
   onEmptyTrash: () => void;
-  onImportPeople: (people: Person[], labels: Label[]) => void;
+  onImportPeople: (people: Person[], labels: Label[]) => Promise<void>;
   onBack: () => void;
 };
 
@@ -244,20 +244,28 @@ export function SettingsScreen({
           : '',
       ].filter(Boolean).join('\n\n');
 
-      const performImport = () => {
-        onImportPeople(plan.people, plan.labels);
-        showMessage(
-          'Import complete',
-          `${plan.people.length} ${plan.people.length === 1 ? 'person was' : 'people were'} added.`,
-        );
+      const performImport = async () => {
+        try {
+          await onImportPeople(plan.people, plan.labels);
+          showMessage(
+            'Import complete',
+            `${plan.people.length} ${plan.people.length === 1 ? 'person was' : 'people were'} added.`,
+          );
+        } catch (error) {
+          console.error('Could not save imported people', error);
+          showMessage(
+            'Import failed',
+            'NameKeep could not save the imported people. Your existing data has not been changed.',
+          );
+        }
       };
 
       if (Platform.OS === 'web') {
-        if (globalThis.confirm(summary)) performImport();
+        if (globalThis.confirm(summary)) await performImport();
       } else {
         Alert.alert('Review import', summary, [
           { text: 'Cancel', style: 'cancel' },
-          { text: 'Import', onPress: performImport },
+          { text: 'Import', onPress: () => void performImport() },
         ]);
       }
     } catch (error) {

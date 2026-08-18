@@ -33,10 +33,21 @@ import {
   type TrashedPerson,
 } from '@/components/settings-screen';
 import type { AppTheme } from '@/constants/theme';
-import { listActiveLabels } from '@/database/labels-repository';
 import {
+  createLabel as createLabelRecord,
+  deleteLabelAndHandlePeople,
+  listActiveLabels,
+  updateLabel as updateLabelRecord,
+} from '@/database/labels-repository';
+import {
+  createPerson as createPersonRecord,
+  deletePersonPermanently as deletePersonPermanentlyRecord,
+  emptyTrash as emptyTrashRecords,
   listActivePeople,
   listTrashedPeople,
+  movePersonToTrash,
+  restorePerson as restorePersonRecord,
+  updatePerson as updatePersonRecord,
 } from '@/database/people-repository';
 import { getSettings } from '@/database/settings-repository';
 import type { Label, Person } from '@/database/types';
@@ -155,6 +166,8 @@ export default function HomeScreen() {
   const [isDatabaseLoading, setIsDatabaseLoading] = useState(true);
   const [databaseLoadError, setDatabaseLoadError] = useState<string | null>(null);
   const [databaseLoadAttempt, setDatabaseLoadAttempt] = useState(0);
+  const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const [isLabelDeleting, setIsLabelDeleting] = useState(false);
   const db = useSQLiteContext();
   const theme = useTheme();
   const { colorScheme, setThemePreference } = useAppTheme();
@@ -358,58 +371,95 @@ export default function HomeScreen() {
     setLabelColor(defaultLabelColor);
   }
 
-  function savePerson() {
+  function showMutationError(action: string, error: unknown) {
+    console.error(`Could not ${action}`, error);
+    const message = `NameKeep couldn’t ${action}. Your saved data has not been changed.`;
+    if (Platform.OS === 'web') {
+      globalThis.alert(message);
+      return;
+    }
+    Alert.alert('Couldn’t save changes', message);
+  }
+
+  async function savePerson() {
+    if (isEditorSaving) return;
+
     const updates = {
       name: personName.trim(),
       description: personDescription.trim(),
       labelId: personLabelId,
     };
 
-    if (editor?.kind === 'person' && editor.id) {
-      setPeople((current) =>
-        current.map((person) =>
-          person.id === editor.id ? { ...person, ...updates } : person,
-        ),
-      );
-    } else {
-      setPeople((current) => [
-        ...current,
-        {
-          id: `person-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    setIsEditorSaving(true);
+    try {
+      if (editor?.kind === 'person' && editor.id) {
+        const personId = editor.id;
+        const updated = await updatePersonRecord(db, personId, updates);
+        if (!updated) throw new Error(`Person ${personId} was not found.`);
+        setPeople((current) =>
+          current.map((person) =>
+            person.id === personId ? { ...person, ...updates } : person,
+          ),
+        );
+      } else {
+        const createdAt = Date.now();
+        const person: Person = {
+          id: `person-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
           ...updates,
-          createdAt: Date.now(),
-        },
-      ]);
+          createdAt,
+        };
+        await createPersonRecord(db, person);
+        setPeople((current) => [...current, person]);
+      }
+      closeEditor();
+    } catch (error) {
+      showMutationError('save this person', error);
+    } finally {
+      setIsEditorSaving(false);
     }
-    closeEditor();
   }
 
-  function saveLabel() {
+  async function saveLabel() {
+    if (isEditorSaving) return;
+
     const trimmedName = labelName.trim();
     if (!trimmedName) {
       return;
     }
 
-    if (editor?.kind === 'label' && editor.id) {
-      setLabels((current) =>
-        current.map((label) =>
-          label.id === editor.id
-            ? { ...label, name: trimmedName, color: labelColor }
-            : label,
-        ),
-      );
-    } else {
-      setLabels((current) => [
-        ...current,
-        {
-          id: `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    setIsEditorSaving(true);
+    try {
+      if (editor?.kind === 'label' && editor.id) {
+        const labelId = editor.id;
+        const updated = await updateLabelRecord(db, labelId, {
           name: trimmedName,
           color: labelColor,
-          createdAt: Date.now(),
-        },
-      ]);
+        });
+        if (!updated) throw new Error(`Label ${labelId} was not found.`);
+        setLabels((current) =>
+          current.map((label) =>
+            label.id === labelId
+              ? { ...label, name: trimmedName, color: labelColor }
+              : label,
+          ),
+        );
+      } else {
+        const createdAt = Date.now();
+        const label: Label = {
+          id: `label-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+          name: trimmedName,
+          color: labelColor,
+          createdAt,
+        };
+        await createLabelRecord(db, label);
+        setLabels((current) => [...current, label]);
+      }
+      closeEditor();
+    } catch (error) {
+      showMutationError('save this label', error);
+    } finally {
+      setIsEditorSaving(false);
     }
-    closeEditor();
   }
 
   function deleteEditedItem() {
@@ -430,21 +480,28 @@ export default function HomeScreen() {
       people.find((person) => person.id === id)?.name || 'this person';
     const message = `Move “${itemName}” to Trash? You can restore them later.`;
 
-    const performDelete = () => {
+    const performDelete = async () => {
       const deletedPerson = people.find((person) => person.id === id);
-      if (deletedPerson) {
+      if (!deletedPerson) return;
+
+      const deletedAt = Date.now();
+      try {
+        const moved = await movePersonToTrash(db, id, deletedAt);
+        if (!moved) throw new Error(`Person ${id} was not found.`);
         setTrash((currentTrash) => [
-          { ...deletedPerson, deletedAt: Date.now() },
+          { ...deletedPerson, deletedAt },
           ...currentTrash,
         ]);
+        setPeople((current) => current.filter((person) => person.id !== id));
+        closeEditor();
+      } catch (error) {
+        showMutationError('move this person to Trash', error);
       }
-      setPeople((current) => current.filter((person) => person.id !== id));
-      closeEditor();
     };
 
     if (Platform.OS === 'web') {
       if (globalThis.confirm(message)) {
-        performDelete();
+        void performDelete();
       }
       return;
     }
@@ -457,7 +514,7 @@ export default function HomeScreen() {
         {
           text: 'Move to Trash',
           style: 'destructive',
-          onPress: performDelete,
+          onPress: () => void performDelete(),
         },
       ],
     );
@@ -470,6 +527,8 @@ export default function HomeScreen() {
   }
 
   function cancelLabelDeletion() {
+    if (isLabelDeleting) return;
+
     const label = labels.find((candidate) => candidate.id === labelDeleteId);
     closeLabelDeleteDialog();
     if (label) {
@@ -477,68 +536,123 @@ export default function HomeScreen() {
     }
   }
 
-  function confirmLabelDeletion(deletePeople: boolean) {
-    if (!labelDeleteId) {
+  async function confirmLabelDeletion(movePeopleToTrash: boolean) {
+    if (!labelDeleteId || isLabelDeleting) {
       return;
     }
 
     const deletedLabelId = labelDeleteId;
-    if (deletePeople) {
-      const deletedPeople = people.filter(
-        (person) => person.labelId === deletedLabelId,
+    const deletedPeople = movePeopleToTrash
+      ? people.filter((person) => person.labelId === deletedLabelId)
+      : [];
+    const deletedAt = Date.now();
+
+    setIsLabelDeleting(true);
+    try {
+      await deleteLabelAndHandlePeople(
+        db,
+        deletedLabelId,
+        {
+          destinationLabelId: deleteDestinationLabelId,
+          movePeopleToTrash,
+        },
+        deletedAt,
       );
+
       if (deletedPeople.length > 0) {
-        const deletedAt = Date.now();
         setTrash((currentTrash) => [
           ...deletedPeople.map((person) => ({ ...person, deletedAt })),
           ...currentTrash,
         ]);
       }
-    }
-    setPeople((current) => {
-      if (deletePeople) {
-        return current.filter((person) => person.labelId !== deletedLabelId);
+
+      setPeople((current) => {
+        if (movePeopleToTrash) {
+          return current.filter((person) => person.labelId !== deletedLabelId);
+        }
+        return current.map((person) =>
+          person.labelId === deletedLabelId
+            ? { ...person, labelId: deleteDestinationLabelId }
+            : person,
+        );
+      });
+      setLabels((current) =>
+        current.filter((label) => label.id !== deletedLabelId),
+      );
+      setCollapsedLabelIds((current) => {
+        const next = new Set(current);
+        next.delete(deletedLabelId);
+        return next;
+      });
+      if (defaultLabelId === deletedLabelId) {
+        setDefaultLabelId(null);
       }
-      return current.map((person) =>
-            person.labelId === deletedLabelId
-              ? { ...person, labelId: deleteDestinationLabelId }
-              : person,
-          );
-    });
-    setLabels((current) =>
-      current.filter((label) => label.id !== deletedLabelId),
-    );
-    setCollapsedLabelIds((current) => {
-      const next = new Set(current);
-      next.delete(deletedLabelId);
-      return next;
-    });
-    if (defaultLabelId === deletedLabelId) {
-      setDefaultLabelId(null);
+      closeLabelDeleteDialog();
+    } catch (error) {
+      showMutationError('delete this label', error);
+    } finally {
+      setIsLabelDeleting(false);
     }
-    closeLabelDeleteDialog();
   }
 
-  function restorePerson(personId: string) {
+  async function restorePerson(personId: string) {
     const restoredPerson = trash.find((person) => person.id === personId);
     if (!restoredPerson) return;
 
-    const { deletedAt: _deletedAt, ...person } = restoredPerson;
-    const restoredLabelId = labels.some((label) => label.id === person.labelId)
-      ? person.labelId
+    const restoredLabelId = labels.some(
+      (label) => label.id === restoredPerson.labelId,
+    )
+      ? restoredPerson.labelId
       : null;
-    setPeople((current) => [
-      ...current,
-      { ...person, labelId: restoredLabelId },
-    ]);
-    setTrash((current) => current.filter((item) => item.id !== personId));
+    const person: Person = {
+      id: restoredPerson.id,
+      name: restoredPerson.name,
+      description: restoredPerson.description,
+      labelId: restoredLabelId,
+      createdAt: restoredPerson.createdAt,
+    };
+
+    try {
+      const restored = await restorePersonRecord(db, personId);
+      if (!restored) throw new Error(`Person ${personId} was not found in Trash.`);
+      setPeople((current) => [...current, person]);
+      setTrash((current) => current.filter((item) => item.id !== personId));
+    } catch (error) {
+      showMutationError('restore this person', error);
+    }
   }
 
-  function deletePersonForever(personId: string) {
-    setTrash((current) => current.filter((person) => person.id !== personId));
+  async function deletePersonForever(personId: string) {
+    try {
+      const deleted = await deletePersonPermanentlyRecord(db, personId);
+      if (!deleted) throw new Error(`Person ${personId} was not found in Trash.`);
+      setTrash((current) => current.filter((person) => person.id !== personId));
+    } catch (error) {
+      showMutationError('permanently delete this person', error);
+    }
   }
 
-  function importPeople(importedPeople: Person[], importedLabels: Label[]) {
+  async function emptyTrash() {
+    try {
+      await emptyTrashRecords(db);
+      setTrash([]);
+    } catch (error) {
+      showMutationError('empty Trash', error);
+    }
+  }
+
+  async function importPeople(
+    importedPeople: Person[],
+    importedLabels: Label[],
+  ) {
+    await db.withExclusiveTransactionAsync(async () => {
+      for (const label of importedLabels) {
+        await createLabelRecord(db, label);
+      }
+      for (const person of importedPeople) {
+        await createPersonRecord(db, person);
+      }
+    });
     setLabels((current) => [...current, ...importedLabels]);
     setPeople((current) => [...current, ...importedPeople]);
   }
@@ -599,7 +713,7 @@ export default function HomeScreen() {
         people={people}
         onBack={() => setIsSettingsOpen(false)}
         onDeleteForever={deletePersonForever}
-        onEmptyTrash={() => setTrash([])}
+        onEmptyTrash={emptyTrash}
         onImportPeople={importPeople}
         onRestore={restorePerson}
         peopleSortOrder={peopleSortOrder}
@@ -1157,9 +1271,11 @@ export default function HomeScreen() {
                 {!!editor?.id && (
                   <Pressable
                     accessibilityRole="button"
+                    disabled={isEditorSaving}
                     onPress={deleteEditedItem}
                     style={({ pressed }) => [
                       styles.deleteButton,
+                      isEditorSaving && styles.saveButtonDisabled,
                       pressed && styles.deleteButtonPressed,
                     ]}>
                     <SymbolView
@@ -1172,25 +1288,34 @@ export default function HomeScreen() {
                 )}
                 <Pressable
                   accessibilityRole="button"
+                  disabled={isEditorSaving}
                   onPress={closeEditor}
                   style={({ pressed }) => [
                     styles.cancelButton,
+                    isEditorSaving && styles.saveButtonDisabled,
                     pressed && styles.cancelButtonPressed,
                   ]}>
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={editor?.kind === 'label' && !labelName.trim()}
+                  disabled={
+                    isEditorSaving ||
+                    (editor?.kind === 'label' && !labelName.trim())
+                  }
                   onPress={editor?.kind === 'person' ? savePerson : saveLabel}
                   style={({ pressed }) => [
                     styles.saveButton,
                     !!editor?.id && styles.editorSaveButton,
-                    editor?.kind === 'label' && !labelName.trim() && styles.saveButtonDisabled,
+                    (isEditorSaving ||
+                      (editor?.kind === 'label' && !labelName.trim())) &&
+                      styles.saveButtonDisabled,
                     pressed && styles.saveButtonPressed,
                   ]}>
                   <Text style={styles.saveButtonText}>
-                    {editor?.id
+                    {isEditorSaving
+                      ? 'Saving…'
+                      : editor?.id
                       ? 'Save'
                       : editor?.kind === 'person' ? 'Add Person' : 'Add Label'}
                   </Text>
@@ -1225,6 +1350,8 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityLabel="Close delete label dialog"
                 accessibilityRole="button"
+                accessibilityState={{ disabled: isLabelDeleting }}
+                disabled={isLabelDeleting}
                 hitSlop={10}
                 onPress={cancelLabelDeletion}
                 style={({ pressed }) => [
@@ -1251,7 +1378,11 @@ export default function HomeScreen() {
               </Text>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ expanded: isDeleteDestinationPickerOpen }}
+                accessibilityState={{
+                  disabled: isLabelDeleting,
+                  expanded: isDeleteDestinationPickerOpen,
+                }}
+                disabled={isLabelDeleting}
                 onPress={() =>
                   setIsDeleteDestinationPickerOpen((current) => !current)
                 }
@@ -1337,35 +1468,49 @@ export default function HomeScreen() {
             <View style={styles.deleteDecisionActions}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: isLabelDeleting }}
+                disabled={isLabelDeleting}
                 onPress={() => confirmLabelDeletion(false)}
                 style={({ pressed }) => [
                   styles.moveAndDeleteButton,
                   pressed && styles.moveAndDeleteButtonPressed,
+                  isLabelDeleting && styles.saveButtonDisabled,
                 ]}>
                 <Text style={styles.moveAndDeleteButtonText}>
-                  Move {peopleInDeletedLabel}{' '}
-                  {peopleInDeletedLabel === 1 ? 'person' : 'people'} & Delete Label
+                  {isLabelDeleting
+                    ? 'Deleting…'
+                    : `Move ${peopleInDeletedLabel} ${
+                        peopleInDeletedLabel === 1 ? 'person' : 'people'
+                      } & Delete Label`}
                 </Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: isLabelDeleting }}
+                disabled={isLabelDeleting}
                 onPress={() => confirmLabelDeletion(true)}
                 style={({ pressed }) => [
                   styles.deleteAllButton,
                   pressed && styles.deleteAllButtonPressed,
+                  isLabelDeleting && styles.saveButtonDisabled,
                 ]}>
                 <Text style={styles.deleteAllButtonText}>
-                  Delete Label & Move {peopleInDeletedLabel}{' '}
-                  {peopleInDeletedLabel === 1 ? 'Person' : 'People'}
-                  {' '}to Trash
+                  {isLabelDeleting
+                    ? 'Deleting…'
+                    : `Delete Label & Move ${peopleInDeletedLabel} ${
+                        peopleInDeletedLabel === 1 ? 'Person' : 'People'
+                      } to Trash`}
                 </Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: isLabelDeleting }}
+                disabled={isLabelDeleting}
                 onPress={cancelLabelDeletion}
                 style={({ pressed }) => [
                   styles.deleteDialogCancelButton,
                   pressed && styles.cancelButtonPressed,
+                  isLabelDeleting && styles.saveButtonDisabled,
                 ]}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </Pressable>
