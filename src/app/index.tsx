@@ -462,6 +462,7 @@ export default function HomeScreen() {
         defaultLabelId={defaultLabelId}
         labelSortOrder={labelSortOrder}
         labels={labels}
+        people={people}
         onBack={() => setIsSettingsOpen(false)}
         onDeleteForever={deletePersonForever}
         onEmptyTrash={() => setTrash([])}
@@ -732,7 +733,16 @@ export default function HomeScreen() {
             );
           })}
 
-          {sections.length === 0 && (
+          {people.length === 0 && (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyTitle}>Go meet people!</Text>
+              <Text style={styles.emptyText}>
+                Then add them with the + button below
+              </Text>
+            </View>
+          )}
+
+          {people.length > 0 && sections.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No one found</Text>
               <Text style={styles.emptyText}>Try a different name or detail.</Text>

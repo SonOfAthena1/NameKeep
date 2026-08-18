@@ -12,6 +12,7 @@
     "expo-glass-effect": "~57.0.1",
     "expo-linking": "~57.0.6",
     "expo-router": "~57.0.13",
+    "expo-sharing": "~57.0.13",
     "expo-splash-screen": "~57.0.6",
     "expo-sqlite": "~57.0.1",
     "expo-status-bar": "~57.0.1",

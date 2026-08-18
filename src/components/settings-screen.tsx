@@ -21,6 +21,8 @@ import {
 import type { AppTheme } from '@/constants/theme';
 import type { Label, Person } from '@/database/types';
 import { useAppTheme, useTheme, type ThemePreference } from '@/hooks/use-theme';
+import { exportPeopleCsv } from '@/lib/export-people';
+import { createPeopleCsv } from '@/lib/people-csv';
 
 export type SortOrder = 'newest' | 'oldest' | 'alphabetical';
 export type TrashedPerson = Person & { deletedAt: number };
@@ -29,6 +31,7 @@ type Picker = 'theme' | 'color' | 'defaultLabel' | 'labelsSort' | 'peopleSort' |
 
 type SettingsScreenProps = {
   labels: Label[];
+  people: Person[];
   defaultLabelColor: LabelColor;
   setDefaultLabelColor: (color: LabelColor) => void;
   defaultLabelId: string | null;
@@ -62,6 +65,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 
 export function SettingsScreen({
   labels,
+  people,
   defaultLabelColor,
   setDefaultLabelColor,
   defaultLabelId,
@@ -85,6 +89,7 @@ export function SettingsScreen({
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [picker, setPicker] = useState<Picker>(null);
   const [showTrash, setShowTrash] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const defaultLabelName =
     labels.find((label) => label.id === defaultLabelId)?.name ?? 'None';
@@ -130,6 +135,28 @@ export function SettingsScreen({
       { text: 'Cancel', style: 'cancel' },
       { text: 'Empty Trash', style: 'destructive', onPress: onEmptyTrash },
     ]);
+  }
+
+  async function exportPeople() {
+    if (people.length === 0 || isExporting) {
+      if (people.length === 0) {
+        Alert.alert('Nothing to export', 'Add at least one person before exporting.');
+      }
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      await exportPeopleCsv(createPeopleCsv(people, labels));
+    } catch (error) {
+      console.error('Could not export people', error);
+      Alert.alert(
+        'Export failed',
+        'NameKeep could not create the CSV file. Please try again.',
+      );
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   if (showTrash) {
@@ -238,6 +265,8 @@ export function SettingsScreen({
         </Section>
 
         <Section title="DATA" styles={styles}>
+          <SettingRow title="Export people" subtitle="Share active people and labels as a CSV file" value={isExporting ? 'Preparing…' : undefined} disabled={isExporting} onPress={exportPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' }} size={20} tintColor={theme.accent} />} />
+          <View style={styles.rowDivider} />
           <SettingRow title="Trash" subtitle="View, restore, or permanently delete people" value={trash.length ? String(trash.length) : undefined} onPress={() => setShowTrash(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'trash', android: 'delete', web: 'delete' }} size={20} tintColor={theme.danger} />} />
         </Section>
       </ScrollView>
@@ -258,8 +287,8 @@ function Section({ title, children, styles }: { title: string; children: React.R
   return <View style={styles.section}><Text style={styles.sectionTitle}>{title}</Text><View style={styles.groupCard}>{children}</View></View>;
 }
 
-function SettingRow({ title, subtitle, value, onPress, expanded, leading, styles, theme }: { title: string; subtitle?: string; value?: string; onPress: () => void; expanded?: boolean; leading?: React.ReactNode; styles: ReturnType<typeof createStyles>; theme: AppTheme }) {
-  return <Pressable accessibilityRole="button" accessibilityState={expanded === undefined ? undefined : { expanded }} onPress={onPress} style={({ pressed }) => [styles.settingRow, pressed && styles.rowPressed]}>{leading}<View style={styles.rowCopy}><Text style={styles.rowTitle}>{title}</Text>{subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}</View>{value && <Text numberOfLines={1} style={styles.rowValue}>{value}</Text>}<SymbolView name={{ ios: expanded ? 'chevron.up' : 'chevron.right', android: expanded ? 'keyboard_arrow_up' : 'chevron_right', web: expanded ? 'keyboard_arrow_up' : 'chevron_right' }} size={19} tintColor={theme.textFaint} /></Pressable>;
+function SettingRow({ title, subtitle, value, onPress, expanded, disabled, leading, styles, theme }: { title: string; subtitle?: string; value?: string; onPress: () => void; expanded?: boolean; disabled?: boolean; leading?: React.ReactNode; styles: ReturnType<typeof createStyles>; theme: AppTheme }) {
+  return <Pressable accessibilityRole="button" accessibilityState={{ disabled, ...(expanded === undefined ? {} : { expanded }) }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.settingRow, disabled && styles.settingRowDisabled, pressed && styles.rowPressed]}>{leading}<View style={styles.rowCopy}><Text style={styles.rowTitle}>{title}</Text>{subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}</View>{value && <Text numberOfLines={1} style={styles.rowValue}>{value}</Text>}<SymbolView name={{ ios: expanded ? 'chevron.up' : 'chevron.right', android: expanded ? 'keyboard_arrow_up' : 'chevron_right', web: expanded ? 'keyboard_arrow_up' : 'chevron_right' }} size={19} tintColor={theme.textFaint} /></Pressable>;
 }
 
 function ChoiceList<T extends string | null>({ options, selected, onSelect, styles, theme }: { options: { value: T; label: string }[]; selected: T; onSelect: (value: T) => void; styles: ReturnType<typeof createStyles>; theme: AppTheme }) {
@@ -280,6 +309,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   sectionTitle: { color: theme.textFaint, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginLeft: 4, marginBottom: 9 },
   groupCard: { borderRadius: 14, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundRaised, overflow: 'hidden' },
   settingRow: { minHeight: 62, paddingHorizontal: 15, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 11 },
+  settingRowDisabled: { opacity: 0.55 },
   rowPressed: { backgroundColor: theme.surfacePressed },
   rowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.borderSoft, marginLeft: 15 },
   rowCopy: { flex: 1, minWidth: 0 },
