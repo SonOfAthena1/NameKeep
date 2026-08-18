@@ -41,6 +41,8 @@ type Picker = 'theme' | 'color' | 'defaultLabel' | 'labelsSort' | 'peopleSort' |
 type SettingsScreenProps = {
   labels: Label[];
   people: Person[];
+  themePreference: ThemePreference;
+  setThemePreference: (preference: ThemePreference) => void;
   defaultLabelColor: LabelColor;
   setDefaultLabelColor: (color: LabelColor) => void;
   defaultLabelId: string | null;
@@ -76,6 +78,8 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 export function SettingsScreen({
   labels,
   people,
+  themePreference,
+  setThemePreference,
   defaultLabelColor,
   setDefaultLabelColor,
   defaultLabelId,
@@ -96,7 +100,7 @@ export function SettingsScreen({
   onBack,
 }: SettingsScreenProps) {
   const theme = useTheme();
-  const { colorScheme, themePreference, setThemePreference } = useAppTheme();
+  const { colorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [picker, setPicker] = useState<Picker>(null);
   const [showTrash, setShowTrash] = useState(false);

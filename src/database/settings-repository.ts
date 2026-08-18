@@ -15,6 +15,8 @@ type SettingsRow = {
   updated_at: number;
 };
 
+export type SettingsPatch = Partial<Omit<AppSettings, 'updatedAt'>>;
+
 function mapSettings(row: SettingsRow): AppSettings {
   return {
     themePreference: row.theme_preference,
@@ -83,4 +85,61 @@ export async function saveSettings(
     throw new Error('The app settings row is missing.');
   }
   return { ...settings, updatedAt };
+}
+
+export async function updateSettings(
+  db: SQLiteDatabase,
+  patch: SettingsPatch,
+  updatedAt = Date.now(),
+): Promise<AppSettings> {
+  const assignments: string[] = [];
+  const parameters: Record<string, string | number | null> = {
+    $updatedAt: updatedAt,
+  };
+
+  if (patch.themePreference !== undefined) {
+    assignments.push('theme_preference = $themePreference');
+    parameters.$themePreference = patch.themePreference;
+  }
+  if (patch.defaultLabelColor !== undefined) {
+    assignments.push('default_label_color = $defaultLabelColor');
+    parameters.$defaultLabelColor = patch.defaultLabelColor;
+  }
+  if (patch.defaultLabelId !== undefined) {
+    assignments.push('default_label_id = $defaultLabelId');
+    parameters.$defaultLabelId = patch.defaultLabelId;
+  }
+  if (patch.labelSortOrder !== undefined) {
+    assignments.push('label_sort_order = $labelSortOrder');
+    parameters.$labelSortOrder = patch.labelSortOrder;
+  }
+  if (patch.peopleSortOrder !== undefined) {
+    assignments.push('people_sort_order = $peopleSortOrder');
+    parameters.$peopleSortOrder = patch.peopleSortOrder;
+  }
+  if (patch.showDate !== undefined) {
+    assignments.push('show_date = $showDate');
+    parameters.$showDate = patch.showDate ? 1 : 0;
+  }
+  if (patch.condensedView !== undefined) {
+    assignments.push('condensed_view = $condensedView');
+    parameters.$condensedView = patch.condensedView ? 1 : 0;
+  }
+
+  if (assignments.length === 0) {
+    return getSettings(db);
+  }
+
+  assignments.push('updated_at = $updatedAt');
+  const result = await db.runAsync(
+    `UPDATE app_settings
+      SET ${assignments.join(',\n          ')}
+      WHERE id = 1`,
+    parameters,
+  );
+  if (result.changes === 0) {
+    throw new Error('The app settings row is missing.');
+  }
+
+  return getSettings(db);
 }

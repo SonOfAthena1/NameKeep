@@ -32,7 +32,7 @@ import {
   type SortOrder,
   type TrashedPerson,
 } from '@/components/settings-screen';
-import type { AppTheme } from '@/constants/theme';
+import type { AppTheme, ThemePreference } from '@/constants/theme';
 import {
   createLabel as createLabelRecord,
   deleteLabelAndHandlePeople,
@@ -49,7 +49,11 @@ import {
   restorePerson as restorePersonRecord,
   updatePerson as updatePersonRecord,
 } from '@/database/people-repository';
-import { getSettings } from '@/database/settings-repository';
+import {
+  getSettings,
+  updateSettings,
+  type SettingsPatch,
+} from '@/database/settings-repository';
 import type { Label, Person } from '@/database/types';
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
 
@@ -170,7 +174,7 @@ export default function HomeScreen() {
   const [isLabelDeleting, setIsLabelDeleting] = useState(false);
   const db = useSQLiteContext();
   const theme = useTheme();
-  const { colorScheme, setThemePreference } = useAppTheme();
+  const { colorScheme, themePreference, setThemePreference } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
   useEffect(() => {
@@ -379,6 +383,64 @@ export default function HomeScreen() {
       return;
     }
     Alert.alert('Couldn’t save changes', message);
+  }
+
+  async function persistSetting(
+    patch: SettingsPatch,
+    applyToApp: () => void,
+  ) {
+    try {
+      await updateSettings(db, patch);
+      applyToApp();
+    } catch (error) {
+      showMutationError('save this setting', error);
+    }
+  }
+
+  function changeThemePreference(preference: ThemePreference) {
+    void persistSetting(
+      { themePreference: preference },
+      () => setThemePreference(preference),
+    );
+  }
+
+  function changeDefaultLabelColor(color: LabelColor) {
+    void persistSetting(
+      { defaultLabelColor: color },
+      () => setDefaultLabelColor(color),
+    );
+  }
+
+  function changeDefaultLabelId(labelId: string | null) {
+    void persistSetting(
+      { defaultLabelId: labelId },
+      () => setDefaultLabelId(labelId),
+    );
+  }
+
+  function changeLabelSortOrder(order: SortOrder) {
+    void persistSetting(
+      { labelSortOrder: order },
+      () => setLabelSortOrder(order),
+    );
+  }
+
+  function changePeopleSortOrder(order: SortOrder) {
+    void persistSetting(
+      { peopleSortOrder: order },
+      () => setPeopleSortOrder(order),
+    );
+  }
+
+  function changeShowDate(value: boolean) {
+    void persistSetting({ showDate: value }, () => setShowDate(value));
+  }
+
+  function changeCondensedView(value: boolean) {
+    void persistSetting(
+      { condensedView: value },
+      () => setCondensedView(value),
+    );
   }
 
   async function savePerson() {
@@ -717,13 +779,15 @@ export default function HomeScreen() {
         onImportPeople={importPeople}
         onRestore={restorePerson}
         peopleSortOrder={peopleSortOrder}
-        setDefaultLabelColor={setDefaultLabelColor}
-        setDefaultLabelId={setDefaultLabelId}
-        setLabelSortOrder={setLabelSortOrder}
-        setPeopleSortOrder={setPeopleSortOrder}
-        setCondensedView={setCondensedView}
-        setShowDate={setShowDate}
+        setDefaultLabelColor={changeDefaultLabelColor}
+        setDefaultLabelId={changeDefaultLabelId}
+        setLabelSortOrder={changeLabelSortOrder}
+        setPeopleSortOrder={changePeopleSortOrder}
+        setCondensedView={changeCondensedView}
+        setShowDate={changeShowDate}
         showDate={showDate}
+        setThemePreference={changeThemePreference}
+        themePreference={themePreference}
         trash={trash}
       />
     );
