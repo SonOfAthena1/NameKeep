@@ -39,6 +39,8 @@ type SettingsScreenProps = {
   setPeopleSortOrder: (order: SortOrder) => void;
   showDate: boolean;
   setShowDate: (showDate: boolean) => void;
+  condensedView: boolean;
+  setCondensedView: (condensedView: boolean) => void;
   trash: TrashedPerson[];
   onRestore: (personId: string) => void;
   onDeleteForever: (personId: string) => void;
@@ -69,6 +71,8 @@ export function SettingsScreen({
   setPeopleSortOrder,
   showDate,
   setShowDate,
+  condensedView,
+  setCondensedView,
   trash,
   onRestore,
   onDeleteForever,
@@ -201,6 +205,14 @@ export function SettingsScreen({
               <Text style={styles.rowSubtitle}>Show the date after each person’s description</Text>
             </View>
             <Switch accessibilityLabel="Show date" value={showDate} onValueChange={setShowDate} trackColor={{ false: theme.border, true: theme.accent }} thumbColor={theme.backgroundRaised} />
+          </View>
+          <View style={styles.rowDivider} />
+          <View style={styles.settingRow}>
+            <View style={styles.rowCopy}>
+              <Text style={styles.rowTitle}>Condensed view</Text>
+              <Text style={styles.rowSubtitle}>Fit more people on screen with tighter spacing</Text>
+            </View>
+            <Switch accessibilityLabel="Condensed view" value={condensedView} onValueChange={setCondensedView} trackColor={{ false: theme.border, true: theme.accent }} thumbColor={theme.backgroundRaised} />
           </View>
         </Section>
 

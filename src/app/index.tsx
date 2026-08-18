@@ -78,9 +78,9 @@ const SAMPLE_PEOPLE: Person[] = [
   },
 ];
 
-const NAME_MAX_LENGTH = 40;
-const DESCRIPTION_MAX_LENGTH = 180;
-const LABEL_MAX_LENGTH = 40;
+const NAME_MAX_LENGTH = 24;
+const DESCRIPTION_MAX_LENGTH = 80;
+const LABEL_MAX_LENGTH = 24;
 const CONTROL_CORNER_RADIUS = 14;
 
 function sortByOrder<T extends { name: string; createdAt: number }>(
@@ -124,6 +124,7 @@ export default function HomeScreen() {
   const [peopleSortOrder, setPeopleSortOrder] =
     useState<SortOrder>('newest');
   const [showDate, setShowDate] = useState(false);
+  const [condensedView, setCondensedView] = useState(false);
   const [collapsedLabelIds, setCollapsedLabelIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -456,6 +457,7 @@ export default function HomeScreen() {
   if (isSettingsOpen) {
     return (
       <SettingsScreen
+        condensedView={condensedView}
         defaultLabelColor={defaultLabelColor}
         defaultLabelId={defaultLabelId}
         labelSortOrder={labelSortOrder}
@@ -468,6 +470,7 @@ export default function HomeScreen() {
         setDefaultLabelId={setDefaultLabelId}
         setLabelSortOrder={setLabelSortOrder}
         setPeopleSortOrder={setPeopleSortOrder}
+        setCondensedView={setCondensedView}
         setShowDate={setShowDate}
         showDate={showDate}
         trash={trash}
@@ -482,7 +485,7 @@ export default function HomeScreen() {
       <View pointerEvents="none" style={styles.glowBottom} />
 
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header}>
+        <View style={[styles.header, condensedView && styles.headerCondensed]}>
           <Text style={styles.title}>People you’ve met</Text>
 
           <View style={styles.brandRow}>
@@ -493,7 +496,11 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.searchRow}>
+        <View
+          style={[
+            styles.searchRow,
+            condensedView && styles.searchRowCondensed,
+          ]}>
           <View style={styles.searchBox}>
             <View style={styles.searchIcon}>
               <View style={styles.searchLens} />
@@ -530,11 +537,18 @@ export default function HomeScreen() {
         </View>
 
         <ScrollView
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            condensedView && styles.listContentCondensed,
+          ]}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <View style={styles.listHeadingRow}>
+          <View
+            style={[
+              styles.listHeadingRow,
+              condensedView && styles.listHeadingRowCondensed,
+            ]}>
             <View style={styles.listHeadingLabelGroup}>
               {sections.length > 0 && (
                 <Pressable
@@ -584,15 +598,24 @@ export default function HomeScreen() {
             return (
               <View
                 key={label.id}
-                style={[styles.section, { borderColor: labelTheme.base }]}>
+                style={[
+                  styles.section,
+                  condensedView && styles.sectionCondensed,
+                  { borderColor: labelTheme.base },
+                ]}>
                 <View
-                  style={[styles.sectionHeader, { backgroundColor: labelTheme.base }]}>
+                  style={[
+                    styles.sectionHeader,
+                    condensedView && styles.sectionHeaderCondensed,
+                    { backgroundColor: labelTheme.base },
+                  ]}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityState={{ expanded: !isCollapsed }}
                     onPress={() => toggleLabel(label.id)}
                     style={({ pressed }) => [
                       styles.sectionToggle,
+                      condensedView && styles.sectionToggleCondensed,
                       label.id === 'no-label' && styles.sectionToggleWithoutEdit,
                       {
                         backgroundColor: pressed ? labelTheme.pressed : labelTheme.base,
@@ -614,9 +637,13 @@ export default function HomeScreen() {
                     <Text style={[styles.sectionTitle, { color: labelTheme.foreground }]}>
                       {label.name}
                     </Text>
-                    <View
-                      style={[styles.countPill, { backgroundColor: labelTheme.foreground }]}>
-                      <Text style={[styles.countText, { color: labelTheme.base }]}>
+                      <View
+                      style={styles.countPill}>
+                      <Text
+                        style={[
+                          styles.countText,
+                          { color: labelTheme.foreground },
+                        ]}>
                         {people.length}
                       </Text>
                     </View>
@@ -641,14 +668,26 @@ export default function HomeScreen() {
                 </View>
 
                 {!isCollapsed && people.length > 0 && (
-                  <View style={styles.peopleList}>
+                  <View
+                    style={[
+                      styles.peopleList,
+                      condensedView && styles.peopleListCondensed,
+                    ]}>
                     {people.map((person, index) => (
                       <View
                         key={person.id}
-                        style={[styles.personRow, index > 0 && styles.personDivider]}>
+                        style={[
+                          styles.personRow,
+                          condensedView && styles.personRowCondensed,
+                          index > 0 && !condensedView && styles.personDivider,
+                        ]}>
                         <View style={styles.personCopy}>
                           <Text style={styles.personLine}>
-                            <Text style={styles.personName}>
+                            <Text
+                              style={[
+                                styles.personName,
+                                condensedView && styles.personNameCondensed,
+                              ]}>
                               {person.name || 'Unnamed person'}
                             </Text>
                             {!!person.description && (
@@ -1226,6 +1265,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerCondensed: {
+    paddingTop: 10,
+    paddingBottom: 10,
+  },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1270,6 +1313,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: 24,
     flexDirection: 'row',
     gap: 10,
+  },
+  searchRowCondensed: {
+    marginBottom: 14,
   },
   searchBox: {
     flex: 1,
@@ -1329,12 +1375,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 118,
   },
+  listContentCondensed: {
+    paddingBottom: 102,
+  },
   listHeadingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 11,
     paddingHorizontal: 2,
+  },
+  listHeadingRowCondensed: {
+    marginBottom: 7,
   },
   listHeadingLabelGroup: {
     flexDirection: 'row',
@@ -1372,10 +1424,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: 13,
     overflow: 'hidden',
   },
+  sectionCondensed: {
+    marginBottom: 8,
+  },
   sectionHeader: {
     minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  sectionHeaderCondensed: {
+    minHeight: 41,
   },
   sectionToggle: {
     flex: 1,
@@ -1383,6 +1441,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingLeft: 15,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  sectionToggleCondensed: {
+    minHeight: 41,
   },
   sectionToggleWithoutEdit: {
     paddingRight: 15,
@@ -1404,17 +1465,13 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     letterSpacing: -0.25,
   },
   countPill: {
-    minWidth: 27,
-    height: 25,
-    borderRadius: 13,
-    paddingHorizontal: 8,
-    backgroundColor: theme.backgroundRaised,
+    minWidth: 22,
+    paddingLeft: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
   countText: {
-    color: theme.accentStrong,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '800',
   },
   labelEditButton: {
@@ -1433,10 +1490,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingBottom: 4,
     backgroundColor: theme.surface,
   },
+  peopleListCondensed: {
+    paddingBottom: 2,
+  },
   personRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 6,
+  },
+  personRowCondensed: {
+    paddingVertical: 2,
   },
   personDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1449,7 +1512,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   personEditButton: {
     width: 18,
     height: 18,
-    marginLeft: 12,
+    marginLeft: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1463,6 +1526,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: -0.15,
+  },
+  personNameCondensed: {
+    fontSize: 13,
+    fontWeight: '400',
+    letterSpacing: 0,
   },
   personDescription: {
     color: theme.textDescription,
