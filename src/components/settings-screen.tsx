@@ -22,7 +22,7 @@ import {
   type LabelColor,
 } from '@/constants/label-colors';
 import type { AppTheme } from '@/constants/theme';
-import type { Label, Person } from '@/database/types';
+import type { Label, Person, SortOrder } from '@/database/types';
 import { useAppTheme, useTheme, type ThemePreference } from '@/hooks/use-theme';
 import { exportPeopleCsv } from '@/lib/export-people';
 import {
@@ -33,7 +33,7 @@ import {
 } from '@/lib/import-people';
 import { createPeopleCsv } from '@/lib/people-csv';
 
-export type SortOrder = 'newest' | 'oldest' | 'alphabetical';
+export type { SortOrder } from '@/database/types';
 export type TrashedPerson = Person & { deletedAt: number };
 
 type Picker = 'theme' | 'color' | 'defaultLabel' | 'labelsSort' | 'peopleSort' | null;

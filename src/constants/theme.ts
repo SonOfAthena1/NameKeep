@@ -58,6 +58,7 @@ export const Colors = {
 
 export const DefaultColorScheme = 'light' as const;
 export type AppColorScheme = keyof typeof Colors;
+export type ThemePreference = AppColorScheme | 'system';
 export type AppTheme = (typeof Colors)[AppColorScheme];
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 

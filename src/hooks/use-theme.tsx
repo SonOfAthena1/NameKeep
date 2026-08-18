@@ -1,15 +1,20 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
-import { Colors, DefaultColorScheme, type AppColorScheme } from '@/constants/theme';
+import {
+  Colors,
+  DefaultColorScheme,
+  type AppColorScheme,
+  type ThemePreference,
+} from '@/constants/theme';
+
+export type { ThemePreference } from '@/constants/theme';
 
 type AppThemeContextValue = {
   colorScheme: AppColorScheme;
   themePreference: ThemePreference;
   setThemePreference: (preference: ThemePreference) => void;
 };
-
-export type ThemePreference = AppColorScheme | 'system';
 
 const AppThemeContext = createContext<AppThemeContextValue | null>(null);
 
