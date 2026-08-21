@@ -2,7 +2,12 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { LabelColor } from '@/constants/label-colors';
 import type { ThemePreference } from '@/constants/theme';
-import type { AppSettings, SortOrder } from '@/database/types';
+import {
+  MEMORY_REMINDER_INTERVALS,
+  type AppSettings,
+  type MemoryReminderInterval,
+  type SortOrder,
+} from '@/database/types';
 
 type SettingsRow = {
   theme_preference: ThemePreference;
@@ -12,8 +17,19 @@ type SettingsRow = {
   people_sort_order: SortOrder;
   show_date: number;
   condensed_view: number;
+  memory_reminder_intervals: string;
   updated_at: number;
 };
+
+function parseMemoryReminderIntervals(value: string): MemoryReminderInterval[] {
+  try {
+    const intervals = JSON.parse(value);
+    if (!Array.isArray(intervals)) return [];
+    return MEMORY_REMINDER_INTERVALS.filter((interval) => intervals.includes(interval));
+  } catch {
+    return [];
+  }
+}
 
 export type SettingsPatch = Partial<Omit<AppSettings, 'updatedAt'>>;
 
@@ -26,6 +42,7 @@ function mapSettings(row: SettingsRow): AppSettings {
     peopleSortOrder: row.people_sort_order,
     showDate: row.show_date === 1,
     condensedView: row.condensed_view === 1,
+    memoryReminderIntervals: parseMemoryReminderIntervals(row.memory_reminder_intervals),
     updatedAt: row.updated_at,
   };
 }
@@ -42,6 +59,7 @@ export async function getSettings(
       people_sort_order,
       show_date,
       condensed_view,
+      memory_reminder_intervals,
       updated_at
     FROM app_settings
     WHERE id = 1
@@ -67,6 +85,7 @@ export async function saveSettings(
           people_sort_order = $peopleSortOrder,
           show_date = $showDate,
           condensed_view = $condensedView,
+          memory_reminder_intervals = $memoryReminderIntervals,
           updated_at = $updatedAt
       WHERE id = 1`,
     {
@@ -77,6 +96,7 @@ export async function saveSettings(
       $peopleSortOrder: settings.peopleSortOrder,
       $showDate: settings.showDate ? 1 : 0,
       $condensedView: settings.condensedView ? 1 : 0,
+      $memoryReminderIntervals: JSON.stringify(settings.memoryReminderIntervals),
       $updatedAt: updatedAt,
     },
   );
@@ -124,6 +144,12 @@ export async function updateSettings(
   if (patch.condensedView !== undefined) {
     assignments.push('condensed_view = $condensedView');
     parameters.$condensedView = patch.condensedView ? 1 : 0;
+  }
+  if (patch.memoryReminderIntervals !== undefined) {
+    assignments.push('memory_reminder_intervals = $memoryReminderIntervals');
+    parameters.$memoryReminderIntervals = JSON.stringify(
+      patch.memoryReminderIntervals,
+    );
   }
 
   if (assignments.length === 0) {

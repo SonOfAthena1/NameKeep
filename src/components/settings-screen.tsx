@@ -23,7 +23,12 @@ import {
   type LabelColor,
 } from '@/constants/label-colors';
 import type { AppTheme } from '@/constants/theme';
-import type { Label, Person, SortOrder } from '@/database/types';
+import {
+  type Label,
+  type MemoryReminderInterval,
+  type Person,
+  type SortOrder,
+} from '@/database/types';
 import { useAppTheme, useTheme, type ThemePreference } from '@/hooks/use-theme';
 import { exportPeopleCsv } from '@/lib/export-people';
 import {
@@ -56,6 +61,11 @@ type SettingsScreenProps = {
   setShowDate: (showDate: boolean) => void;
   condensedView: boolean;
   setCondensedView: (condensedView: boolean) => void;
+  memoryReminderIntervals: MemoryReminderInterval[];
+  setMemoryReminderInterval: (
+    interval: MemoryReminderInterval,
+    enabled: boolean,
+  ) => void;
   trash: TrashedPerson[];
   onRestore: (personId: string) => void;
   onDeleteForever: (personId: string) => void;
@@ -78,6 +88,13 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 
 const SUPPORT_URL = 'https://namekeep.lwcuellar.org/support';
 
+const MEMORY_REMINDER_OPTIONS: { value: MemoryReminderInterval; label: string }[] = [
+  { value: 1, label: '1 day later' },
+  { value: 3, label: '3 days later' },
+  { value: 7, label: '1 week later' },
+  { value: 14, label: '2 weeks later' },
+];
+
 export function SettingsScreen({
   labels,
   people,
@@ -95,6 +112,8 @@ export function SettingsScreen({
   setShowDate,
   condensedView,
   setCondensedView,
+  memoryReminderIntervals,
+  setMemoryReminderInterval,
   trash,
   onRestore,
   onDeleteForever,
@@ -414,6 +433,31 @@ export function SettingsScreen({
           </View>
         </Section>
 
+        <Section title="MEMORY REMINDERS" styles={styles}>
+          <Text style={styles.sectionHelper}>
+            Choose when to be reminded about people you add from now on. Selecting any option opts you in to notifications.
+          </Text>
+          {MEMORY_REMINDER_OPTIONS.map((option, index) => (
+            <Fragment key={option.value}>
+              {index > 0 && <View style={styles.rowDivider} />}
+              <View style={styles.settingRow}>
+                <View style={styles.rowCopy}>
+                  <Text style={styles.rowTitle}>{option.label}</Text>
+                </View>
+                <Switch
+                  accessibilityLabel={`Memory reminder ${option.label}`}
+                  onValueChange={(enabled) =>
+                    setMemoryReminderInterval(option.value, enabled)
+                  }
+                  thumbColor={theme.backgroundRaised}
+                  trackColor={{ false: theme.border, true: theme.accent }}
+                  value={memoryReminderIntervals.includes(option.value)}
+                />
+              </View>
+            </Fragment>
+          ))}
+        </Section>
+
         <Section title="DATA" styles={styles}>
           <SettingRow title="Export people" subtitle="Choose where to save or share a CSV file" value={isExporting ? 'Preparing…' : undefined} disabled={isExporting} onPress={exportPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
@@ -550,6 +594,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 50 },
   section: { marginBottom: 25 },
   sectionTitle: { color: theme.textFaint, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginLeft: 4, marginBottom: 9 },
+  sectionHelper: { color: theme.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 10, paddingHorizontal: 4 },
   groupCard: { borderRadius: 14, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundRaised, overflow: 'hidden' },
   settingRow: { minHeight: 62, paddingHorizontal: 15, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 11 },
   settingRowDisabled: { opacity: 0.55 },

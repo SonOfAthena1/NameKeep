@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { withWriteTransaction } from '@/database/transactions';
 
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -77,6 +77,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           show_date INTEGER NOT NULL DEFAULT 0 CHECK (show_date IN (0, 1)),
           condensed_view INTEGER NOT NULL DEFAULT 0
             CHECK (condensed_view IN (0, 1)),
+          memory_reminder_intervals TEXT NOT NULL DEFAULT '[]',
           updated_at INTEGER NOT NULL,
           FOREIGN KEY (default_label_id) REFERENCES labels(id) ON DELETE SET NULL
         );
@@ -90,6 +91,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           people_sort_order,
           show_date,
           condensed_view,
+          memory_reminder_intervals,
           updated_at
         ) VALUES (
           1,
@@ -100,6 +102,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           'newest',
           0,
           0,
+          '[]',
           CAST(strftime('%s', 'now') AS INTEGER) * 1000
         );
       `);
@@ -188,6 +191,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           show_date INTEGER NOT NULL DEFAULT 0 CHECK (show_date IN (0, 1)),
           condensed_view INTEGER NOT NULL DEFAULT 0
             CHECK (condensed_view IN (0, 1)),
+          memory_reminder_intervals TEXT NOT NULL DEFAULT '[]',
           updated_at INTEGER NOT NULL,
           FOREIGN KEY (default_label_id) REFERENCES labels(id) ON DELETE SET NULL
         );
@@ -201,6 +205,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           people_sort_order,
           show_date,
           condensed_view,
+          memory_reminder_intervals,
           updated_at
         ) VALUES (
           1,
@@ -211,8 +216,16 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           'newest',
           0,
           0,
+          '[]',
           CAST(strftime('%s', 'now') AS INTEGER) * 1000
         );
+      `);
+    }
+
+    if (currentVersion === 4) {
+      await db.execAsync(`
+        ALTER TABLE app_settings
+          ADD COLUMN memory_reminder_intervals TEXT NOT NULL DEFAULT '[]';
       `);
     }
 

@@ -1,5 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
+import * as Notifications from 'expo-notifications';
+import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -55,8 +57,18 @@ import {
   updateSettings,
   type SettingsPatch,
 } from '@/database/settings-repository';
-import type { Label, Person } from '@/database/types';
+import {
+  type Label,
+  type MemoryReminderInterval,
+  type Person,
+} from '@/database/types';
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
+import {
+  cancelMemoryRemindersForPeople,
+  getMemoryReminderPersonId,
+  requestMemoryReminderPermission,
+  scheduleMemoryReminders,
+} from '@/lib/memory-reminders';
 
 const SAMPLE_LABELS: Label[] = [
   { id: 'work', name: 'Work', color: 'green', createdAt: 1_755_907_200_000 },
@@ -158,6 +170,9 @@ export default function HomeScreen() {
     useState<SortOrder>('newest');
   const [showDate, setShowDate] = useState(false);
   const [condensedView, setCondensedView] = useState(false);
+  const [memoryReminderIntervals, setMemoryReminderIntervals] = useState<
+    MemoryReminderInterval[]
+  >([]);
   const [collapsedLabelIds, setCollapsedLabelIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -187,6 +202,7 @@ export default function HomeScreen() {
   const [isBulkLabelPickerOpen, setIsBulkLabelPickerOpen] = useState(false);
   const [isBulkActionSaving, setIsBulkActionSaving] = useState(false);
   const db = useSQLiteContext();
+  const router = useRouter();
   const theme = useTheme();
   const { colorScheme, themePreference, setThemePreference } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -243,6 +259,7 @@ export default function HomeScreen() {
         setPeopleSortOrder(settings.peopleSortOrder);
         setShowDate(settings.showDate);
         setCondensedView(settings.condensedView);
+        setMemoryReminderIntervals(settings.memoryReminderIntervals);
         setThemePreference(settings.themePreference);
       } catch (error) {
         if (cancelled) return;
@@ -260,6 +277,23 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [databaseLoadAttempt, db, setThemePreference]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        const personId = getMemoryReminderPersonId(response);
+        if (personId) {
+          router.push({
+            pathname: '/remember/[personId]',
+            params: { personId },
+          } as unknown as Href);
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, [router]);
 
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -427,6 +461,9 @@ export default function HomeScreen() {
             if (!moved) throw new Error(`Person ${person.id} was not found.`);
           }
         });
+        await cancelMemoryRemindersForPeople(
+          peopleToMove.map((person) => person.id),
+        );
         const movedIds = new Set(peopleToMove.map((person) => person.id));
         setTrash((current) => [
           ...peopleToMove.map((person) => ({ ...person, deletedAt })),
@@ -568,6 +605,27 @@ export default function HomeScreen() {
     );
   }
 
+  async function changeMemoryReminderInterval(
+    interval: MemoryReminderInterval,
+    enabled: boolean,
+  ) {
+    if (enabled && !(await requestMemoryReminderPermission())) {
+      Alert.alert(
+        'Notifications are off',
+        'Allow notifications for NameKeep in your device settings to use memory reminders.',
+      );
+      return;
+    }
+
+    const nextIntervals = enabled
+      ? [...new Set([...memoryReminderIntervals, interval])].sort((a, b) => a - b)
+      : memoryReminderIntervals.filter((value) => value !== interval);
+    await persistSetting(
+      { memoryReminderIntervals: nextIntervals },
+      () => setMemoryReminderIntervals(nextIntervals),
+    );
+  }
+
   async function savePerson() {
     if (isEditorSaving) return;
 
@@ -597,6 +655,7 @@ export default function HomeScreen() {
         };
         await createPersonRecord(db, person);
         setPeople((current) => [...current, person]);
+        await scheduleMemoryReminders(person, memoryReminderIntervals);
       }
       closeEditor();
     } catch (error) {
@@ -675,6 +734,7 @@ export default function HomeScreen() {
       try {
         const moved = await movePersonToTrash(db, id, deletedAt);
         if (!moved) throw new Error(`Person ${id} was not found.`);
+        await cancelMemoryRemindersForPeople([id]);
         setTrash((currentTrash) => [
           { ...deletedPerson, deletedAt },
           ...currentTrash,
@@ -747,6 +807,9 @@ export default function HomeScreen() {
       );
 
       if (deletedPeople.length > 0) {
+        await cancelMemoryRemindersForPeople(
+          deletedPeople.map((person) => person.id),
+        );
         setTrash((currentTrash) => [
           ...deletedPeople.map((person) => ({ ...person, deletedAt })),
           ...currentTrash,
@@ -897,6 +960,7 @@ export default function HomeScreen() {
         defaultLabelId={defaultLabelId}
         labelSortOrder={labelSortOrder}
         labels={labels}
+        memoryReminderIntervals={memoryReminderIntervals}
         people={people}
         onBack={() => setIsSettingsOpen(false)}
         onDeleteForever={deletePersonForever}
@@ -907,6 +971,9 @@ export default function HomeScreen() {
         setDefaultLabelColor={changeDefaultLabelColor}
         setDefaultLabelId={changeDefaultLabelId}
         setLabelSortOrder={changeLabelSortOrder}
+        setMemoryReminderInterval={(interval, enabled) => {
+          void changeMemoryReminderInterval(interval, enabled);
+        }}
         setPeopleSortOrder={changePeopleSortOrder}
         setCondensedView={changeCondensedView}
         setShowDate={changeShowDate}

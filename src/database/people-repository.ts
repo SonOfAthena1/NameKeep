@@ -60,6 +60,19 @@ export async function listActivePeople(
   return rows.map(mapPerson);
 }
 
+export async function getActivePerson(
+  db: SQLiteDatabase,
+  id: string,
+): Promise<StoredPerson | null> {
+  const row = await db.getFirstAsync<PersonRow>(`
+    SELECT ${PERSON_COLUMNS}
+    FROM people
+    WHERE id = $id
+      AND deleted_at IS NULL
+  `, { $id: id });
+  return row ? mapPerson(row) : null;
+}
+
 export async function listTrashedPeople(
   db: SQLiteDatabase,
 ): Promise<StoredTrashedPerson[]> {
