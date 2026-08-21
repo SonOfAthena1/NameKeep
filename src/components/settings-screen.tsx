@@ -42,7 +42,14 @@ import { createPeopleCsv } from '@/lib/people-csv';
 export type { SortOrder } from '@/database/types';
 export type TrashedPerson = Person & { deletedAt: number };
 
-type Picker = 'theme' | 'color' | 'defaultLabel' | 'labelsSort' | 'peopleSort' | null;
+type Picker =
+  | 'theme'
+  | 'color'
+  | 'defaultLabel'
+  | 'labelsSort'
+  | 'peopleSort'
+  | 'memoryReminders'
+  | null;
 
 type SettingsScreenProps = {
   labels: Label[];
@@ -142,6 +149,9 @@ export function SettingsScreen({
     SORT_OPTIONS.find((option) => option.value === labelSortOrder)?.label ?? '';
   const peopleSortName =
     SORT_OPTIONS.find((option) => option.value === peopleSortOrder)?.label ?? '';
+  const memoryReminderName = memoryReminderIntervals.length
+    ? `${memoryReminderIntervals.length} selected`
+    : 'Off';
 
   function togglePicker(nextPicker: Exclude<Picker, null>) {
     setPicker((current) => (current === nextPicker ? null : nextPicker));
@@ -434,28 +444,48 @@ export function SettingsScreen({
         </Section>
 
         <Section title="MEMORY REMINDERS" styles={styles}>
-          <Text style={styles.sectionHelper}>
-            Choose when to be reminded about people you add from now on. Selecting any option opts you in to notifications.
-          </Text>
-          {MEMORY_REMINDER_OPTIONS.map((option, index) => (
-            <Fragment key={option.value}>
-              {index > 0 && <View style={styles.rowDivider} />}
-              <View style={styles.settingRow}>
-                <View style={styles.rowCopy}>
-                  <Text style={styles.rowTitle}>{option.label}</Text>
-                </View>
-                <Switch
-                  accessibilityLabel={`Memory reminder ${option.label}`}
-                  onValueChange={(enabled) =>
-                    setMemoryReminderInterval(option.value, enabled)
-                  }
-                  thumbColor={theme.backgroundRaised}
-                  trackColor={{ false: theme.border, true: theme.accent }}
-                  value={memoryReminderIntervals.includes(option.value)}
-                />
-              </View>
-            </Fragment>
-          ))}
+          <SettingRow
+            title="Memory reminders"
+            subtitle="Choose reminders for people you add from now on"
+            value={memoryReminderName}
+            onPress={() => togglePicker('memoryReminders')}
+            expanded={picker === 'memoryReminders'}
+            styles={styles}
+            theme={theme}
+          />
+          {picker === 'memoryReminders' && (
+            <View style={styles.multiChoiceList}>
+              <Text style={styles.multiChoiceHelper}>
+                Selecting any option opts you in to notifications.
+              </Text>
+              {MEMORY_REMINDER_OPTIONS.map((option) => {
+                const selected = memoryReminderIntervals.includes(option.value);
+                return (
+                  <Pressable
+                    key={option.value}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
+                    onPress={() =>
+                      setMemoryReminderInterval(option.value, !selected)
+                    }
+                    style={({ pressed }) => [
+                      styles.choiceRow,
+                      selected && styles.choiceRowSelected,
+                      pressed && styles.rowPressed,
+                    ]}>
+                    <Text style={styles.choiceText}>{option.label}</Text>
+                    {selected && (
+                      <SymbolView
+                        name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                        size={17}
+                        tintColor={theme.accent}
+                      />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </Section>
 
         <Section title="DATA" styles={styles}>
@@ -594,7 +624,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   content: { paddingHorizontal: 24, paddingTop: 22, paddingBottom: 50 },
   section: { marginBottom: 25 },
   sectionTitle: { color: theme.textFaint, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, marginLeft: 4, marginBottom: 9 },
-  sectionHelper: { color: theme.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 10, paddingHorizontal: 4 },
   groupCard: { borderRadius: 14, borderWidth: 1, borderColor: theme.border, backgroundColor: theme.backgroundRaised, overflow: 'hidden' },
   settingRow: { minHeight: 62, paddingHorizontal: 15, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 11 },
   settingRowDisabled: { opacity: 0.55 },
@@ -606,6 +635,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   rowValue: { maxWidth: '42%', color: theme.textSecondary, fontSize: 13, fontWeight: '600' },
   colorDot: { width: 16, height: 16, borderRadius: 8 },
   choiceList: { padding: 7, paddingTop: 0 },
+  multiChoiceList: { padding: 7, paddingTop: 0 },
+  multiChoiceHelper: { color: theme.textMuted, fontSize: 12, lineHeight: 18, paddingHorizontal: 7, paddingTop: 7, paddingBottom: 6 },
   choiceRow: { minHeight: 43, borderRadius: 10, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   choiceRowSelected: { backgroundColor: theme.accentMuted },
   choiceText: { color: theme.text, fontSize: 14, fontWeight: '600' },
