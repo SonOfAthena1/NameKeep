@@ -1,5 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { withWriteTransaction } from '@/database/transactions';
+
 const DATABASE_VERSION = 4;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
@@ -23,7 +25,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     return;
   }
 
-  await db.withExclusiveTransactionAsync(async () => {
+  await withWriteTransaction(db, async (db) => {
     if (currentVersion === 0) {
       await db.execAsync(`
         CREATE TABLE labels (

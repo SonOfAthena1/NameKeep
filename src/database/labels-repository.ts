@@ -1,6 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 import type { LabelColor } from '@/constants/label-colors';
+import { withWriteTransaction } from '@/database/transactions';
 import type { StoredLabel } from '@/database/types';
 
 type LabelRow = {
@@ -134,7 +135,7 @@ export async function deleteLabelAndHandlePeople(
 
   let affectedPeople = 0;
 
-  await db.withExclusiveTransactionAsync(async () => {
+  await withWriteTransaction(db, async (db) => {
     const label = await db.getFirstAsync<{ id: string }>(
       `SELECT id
         FROM labels

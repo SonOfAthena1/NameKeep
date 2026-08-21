@@ -39,6 +39,7 @@ import {
   listActiveLabels,
   updateLabel as updateLabelRecord,
 } from '@/database/labels-repository';
+import { withWriteTransaction } from '@/database/transactions';
 import {
   createPerson as createPersonRecord,
   deletePersonPermanently as deletePersonPermanentlyRecord,
@@ -707,7 +708,7 @@ export default function HomeScreen() {
     importedPeople: Person[],
     importedLabels: Label[],
   ) {
-    await db.withExclusiveTransactionAsync(async () => {
+    await withWriteTransaction(db, async (db) => {
       for (const label of importedLabels) {
         await createLabelRecord(db, label);
       }
