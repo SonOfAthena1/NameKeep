@@ -443,10 +443,10 @@ export function SettingsScreen({
           </View>
         </Section>
 
-        <Section title="MEMORY REMINDERS" styles={styles}>
+        <Section title="MEMORY HELP" styles={styles}>
           <SettingRow
             title="Memory reminders"
-            subtitle="Choose reminders for people you add from now on"
+            subtitle="Get little memory quiz notifications for people you add from now on"
             value={memoryReminderName}
             onPress={() => togglePicker('memoryReminders')}
             expanded={picker === 'memoryReminders'}
