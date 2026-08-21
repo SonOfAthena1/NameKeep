@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { withWriteTransaction } from '@/database/transactions';
 
-const DATABASE_VERSION = 5;
+const DATABASE_VERSION = 7;
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
@@ -227,6 +227,18 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         ALTER TABLE app_settings
           ADD COLUMN memory_reminder_intervals TEXT NOT NULL DEFAULT '[]';
       `);
+    }
+
+    if (currentVersion === 6) {
+      // Version 6 temporarily made blue the default label color. Restore the
+      // original green default without changing any existing label colors.
+      await db.runAsync(
+        `UPDATE app_settings
+          SET default_label_color = 'green',
+              updated_at = $updatedAt
+          WHERE id = 1`,
+        { $updatedAt: Date.now() },
+      );
     }
 
     await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

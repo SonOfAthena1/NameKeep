@@ -7,7 +7,8 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
-export const Colors = {
+/** The original palette, kept intact so the green version can be restored in one line. */
+export const GreenColors = {
   light: {
     background: '#F6FBF8',
     backgroundRaised: '#FFFFFF',
@@ -55,6 +56,62 @@ export const Colors = {
     shadow: '#000000',
   },
 } as const;
+
+/**
+ * The blue version uses the app's existing blue label hue for every primary
+ * interaction: buttons, selections, navigation, and highlights.
+ */
+export const BlueColors = {
+  light: {
+    background: '#F7F9FF',
+    backgroundRaised: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfacePressed: '#E7EDFF',
+    backgroundElement: '#E7EDFF',
+    backgroundSelected: '#D7E2FF',
+    border: '#B9C9F0',
+    borderSoft: '#D8E2F8',
+    accent: '#2854B8',
+    accentStrong: '#20459E',
+    accentMuted: '#E3EAFF',
+    danger: '#B42318',
+    text: '#111B35',
+    textSecondary: '#4E638D',
+    textMuted: '#4E638D',
+    textDescription: '#263550',
+    textFaint: '#5A6D96',
+    glowTop: '#7697ED',
+    glowBottom: '#A5B8F5',
+    buttonBorder: '#2854B8',
+    shadow: '#182950',
+  },
+  dark: {
+    background: '#081124',
+    backgroundRaised: '#0B1730',
+    surface: '#10203D',
+    surfacePressed: '#18335E',
+    backgroundElement: '#10203D',
+    backgroundSelected: '#18335E',
+    border: '#264B88',
+    borderSoft: '#193461',
+    accent: '#7191FF',
+    accentStrong: '#5775E8',
+    accentMuted: '#243F8E',
+    danger: '#FF7A70',
+    text: '#EEF2FF',
+    textSecondary: '#AABCF6',
+    textMuted: '#AABCF6',
+    textDescription: '#C7D3FF',
+    textFaint: '#8297CE',
+    glowTop: '#2E52B3',
+    glowBottom: '#243F8E',
+    buttonBorder: '#98B0FF',
+    shadow: '#000000',
+  },
+} as const;
+
+// Change this to GreenColors to restore the original green app palette.
+export const Colors = GreenColors;
 
 export const DefaultColorScheme = 'light' as const;
 export type AppColorScheme = keyof typeof Colors;
