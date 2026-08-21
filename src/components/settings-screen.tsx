@@ -1,5 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
 import { Fragment, useMemo, useState } from 'react';
@@ -75,6 +76,8 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
+const SUPPORT_URL = 'https://namekeep.lwcuellar.org/support';
+
 export function SettingsScreen({
   labels,
   people,
@@ -123,6 +126,13 @@ export function SettingsScreen({
 
   function togglePicker(nextPicker: Exclude<Picker, null>) {
     setPicker((current) => (current === nextPicker ? null : nextPicker));
+  }
+
+  function openSupport() {
+    void Linking.openURL(SUPPORT_URL).catch((error) => {
+      console.error('Could not open support page', error);
+      showMessage('Could not open Help', 'Please try again in a moment.');
+    });
   }
 
   function confirmDeleteForever(person: TrashedPerson) {
@@ -410,6 +420,10 @@ export function SettingsScreen({
           <SettingRow title="Import people" subtitle="Add people and labels from a CSV file" value={isImporting ? 'Reading…' : undefined} disabled={isImporting} onPress={() => setIsImportGuideOpen(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
           <SettingRow title="Trash" subtitle="View, restore, or permanently delete people" value={trash.length ? String(trash.length) : undefined} onPress={() => setShowTrash(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'trash', android: 'delete', web: 'delete' }} size={20} tintColor={theme.danger} />} />
+        </Section>
+
+        <Section title="SUPPORT" styles={styles}>
+          <SettingRow title="Help" subtitle="Get support with NameKeep" onPress={openSupport} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'questionmark.circle', android: 'help_outline', web: 'help_outline' }} size={20} tintColor={theme.accent} />} />
         </Section>
       </ScrollView>
 
