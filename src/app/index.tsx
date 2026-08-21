@@ -609,7 +609,11 @@ export default function HomeScreen() {
     interval: MemoryReminderInterval,
     enabled: boolean,
   ) {
-    if (enabled && !(await requestMemoryReminderPermission())) {
+    if (
+      Platform.OS !== 'web' &&
+      enabled &&
+      !(await requestMemoryReminderPermission())
+    ) {
       Alert.alert(
         'Notifications are off',
         'Allow notifications for NameKeep in your device settings to use memory reminders.',
