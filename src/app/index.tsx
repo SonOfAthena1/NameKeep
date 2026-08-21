@@ -180,6 +180,12 @@ export default function HomeScreen() {
   const [databaseLoadAttempt, setDatabaseLoadAttempt] = useState(0);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
   const [isLabelDeleting, setIsLabelDeleting] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [isBulkLabelPickerOpen, setIsBulkLabelPickerOpen] = useState(false);
+  const [isBulkActionSaving, setIsBulkActionSaving] = useState(false);
   const db = useSQLiteContext();
   const theme = useTheme();
   const { colorScheme, themePreference, setThemePreference } = useAppTheme();
@@ -313,6 +319,11 @@ export default function HomeScreen() {
   const areAllVisibleSectionsCollapsed =
     sections.length > 0 &&
     sections.every(({ label }) => collapsedLabelIds.has(label.id));
+  const visiblePeople = sections.flatMap(({ people: sectionPeople }) => sectionPeople);
+  const selectedPeople = people.filter((person) => selectedPersonIds.has(person.id));
+  const areAllVisiblePeopleSelected =
+    visiblePeople.length > 0 &&
+    visiblePeople.every((person) => selectedPersonIds.has(person.id));
 
   function toggleLabel(labelId: string) {
     setCollapsedLabelIds((current) => {
@@ -337,6 +348,112 @@ export default function HomeScreen() {
       }
       return next;
     });
+  }
+
+  function exitSelectionMode() {
+    setIsSelectionMode(false);
+    setSelectedPersonIds(new Set());
+    setIsBulkLabelPickerOpen(false);
+  }
+
+  function togglePersonSelection(personId: string) {
+    setSelectedPersonIds((current) => {
+      const next = new Set(current);
+      if (next.has(personId)) {
+        next.delete(personId);
+      } else {
+        next.add(personId);
+      }
+      return next;
+    });
+  }
+
+  function toggleVisiblePeopleSelection() {
+    setSelectedPersonIds((current) => {
+      const next = new Set(current);
+      if (areAllVisiblePeopleSelected) {
+        visiblePeople.forEach((person) => next.delete(person.id));
+      } else {
+        visiblePeople.forEach((person) => next.add(person.id));
+      }
+      return next;
+    });
+  }
+
+  async function moveSelectedPeopleToLabel(labelId: string | null) {
+    if (selectedPeople.length === 0 || isBulkActionSaving) return;
+
+    const peopleToMove = selectedPeople;
+    setIsBulkActionSaving(true);
+    try {
+      await withWriteTransaction(db, async (transaction) => {
+        for (const person of peopleToMove) {
+          const updated = await updatePersonRecord(transaction, person.id, {
+            name: person.name,
+            description: person.description,
+            labelId,
+          });
+          if (!updated) throw new Error(`Person ${person.id} was not found.`);
+        }
+      });
+      const movedIds = new Set(peopleToMove.map((person) => person.id));
+      setPeople((current) =>
+        current.map((person) =>
+          movedIds.has(person.id) ? { ...person, labelId } : person,
+        ),
+      );
+      exitSelectionMode();
+    } catch (error) {
+      showMutationError('move these people', error);
+    } finally {
+      setIsBulkActionSaving(false);
+    }
+  }
+
+  function confirmMoveSelectedPeopleToTrash() {
+    if (selectedPeople.length === 0 || isBulkActionSaving) return;
+
+    const count = selectedPeople.length;
+    const message = `Move ${count} ${count === 1 ? 'person' : 'people'} to Trash? You can restore them later.`;
+    const performMove = async () => {
+      const peopleToMove = selectedPeople;
+      const deletedAt = Date.now();
+
+      setIsBulkActionSaving(true);
+      try {
+        await withWriteTransaction(db, async (transaction) => {
+          for (const person of peopleToMove) {
+            const moved = await movePersonToTrash(transaction, person.id, deletedAt);
+            if (!moved) throw new Error(`Person ${person.id} was not found.`);
+          }
+        });
+        const movedIds = new Set(peopleToMove.map((person) => person.id));
+        setTrash((current) => [
+          ...peopleToMove.map((person) => ({ ...person, deletedAt })),
+          ...current,
+        ]);
+        setPeople((current) => current.filter((person) => !movedIds.has(person.id)));
+        exitSelectionMode();
+      } catch (error) {
+        showMutationError('move these people to Trash', error);
+      } finally {
+        setIsBulkActionSaving(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm(message)) void performMove();
+      return;
+    }
+
+    Alert.alert('Move to Trash?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Move to Trash',
+        style: 'destructive',
+        onPress: () => void performMove(),
+      },
+    ]);
   }
 
   function openSettings() {
@@ -909,9 +1026,49 @@ export default function HomeScreen() {
               )}
               <Text style={styles.listHeading}>YOUR LABELS</Text>
             </View>
-            <Text style={styles.peopleCount}>
-              {people.length} {people.length === 1 ? 'person' : 'people'}
-            </Text>
+            {isSelectionMode ? (
+              <View style={styles.selectionHeadingActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={toggleVisiblePeopleSelection}
+                  style={({ pressed }) => [
+                    styles.selectAllButton,
+                    pressed && styles.selectAllButtonPressed,
+                  ]}>
+                  <Text style={styles.selectAllButtonText}>
+                    {areAllVisiblePeopleSelected ? 'Clear visible' : 'Select visible'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={exitSelectionMode}
+                  style={({ pressed }) => [
+                    styles.selectButton,
+                    pressed && styles.selectButtonPressed,
+                  ]}>
+                  <Text style={styles.selectButtonText}>Cancel</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.peopleCountActions}>
+                <Text style={styles.peopleCount}>
+                  {people.length} {people.length === 1 ? 'person' : 'people'}
+                </Text>
+                <Pressable
+                  accessibilityLabel="Select people"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setIsAddMenuOpen(false);
+                    setIsSelectionMode(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.selectButton,
+                    pressed && styles.selectButtonPressed,
+                  ]}>
+                  <Text style={styles.selectButtonText}>Select</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
           {sections.map(({ label, people }) => {
@@ -1002,52 +1159,66 @@ export default function HomeScreen() {
                       styles.peopleList,
                       condensedView && styles.peopleListCondensed,
                     ]}>
-                    {people.map((person, index) => (
-                      <View
-                        key={person.id}
-                        style={[
-                          styles.personRow,
-                          condensedView && styles.personRowCondensed,
-                          index > 0 && !condensedView && styles.personDivider,
-                        ]}>
-                        <View style={styles.personCopy}>
-                          <Text style={styles.personLine}>
-                            <Text
-                              style={[
-                                styles.personName,
-                                condensedView && styles.personNameCondensed,
-                              ]}>
-                              {person.name || 'Unnamed person'}
+                    {people.map((person, index) => {
+                      const isSelected = selectedPersonIds.has(person.id);
+                      const rowStyle = [
+                        styles.personRow,
+                        condensedView && styles.personRowCondensed,
+                        index > 0 && !condensedView && styles.personDivider,
+                      ];
+
+                      if (isSelectionMode) {
+                        return (
+                          <Pressable
+                            key={person.id}
+                            accessibilityLabel={`Select ${person.name}`}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: isSelected }}
+                            onPress={() => togglePersonSelection(person.id)}
+                            style={({ pressed }) => [
+                              rowStyle,
+                              styles.selectablePersonRow,
+                              isSelected && styles.selectablePersonRowSelected,
+                              pressed && styles.selectablePersonRowPressed,
+                            ]}>
+                            <View style={styles.personCopy}>
+                              <Text style={styles.personLine}>
+                                <Text style={[styles.personName, condensedView && styles.personNameCondensed]}>
+                                  {person.name || 'Unnamed person'}
+                                </Text>
+                                {!!person.description && <Text style={styles.personDescription}> — {person.description}</Text>}
+                                {showDate && <Text style={styles.personDate}> ({formatShortDate(person.createdAt)})</Text>}
+                              </Text>
+                            </View>
+                            <View style={[styles.personCheckbox, isSelected && styles.personCheckboxSelected]}>
+                              {isSelected && <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={15} tintColor={theme.background} />}
+                            </View>
+                          </Pressable>
+                        );
+                      }
+
+                      return (
+                        <View key={person.id} style={rowStyle}>
+                          <View style={styles.personCopy}>
+                            <Text style={styles.personLine}>
+                              <Text style={[styles.personName, condensedView && styles.personNameCondensed]}>
+                                {person.name || 'Unnamed person'}
+                              </Text>
+                              {!!person.description && <Text style={styles.personDescription}> — {person.description}</Text>}
+                              {showDate && <Text style={styles.personDate}> ({formatShortDate(person.createdAt)})</Text>}
                             </Text>
-                            {!!person.description && (
-                              <Text style={styles.personDescription}>
-                                {' '}— {person.description}
-                              </Text>
-                            )}
-                            {showDate && (
-                              <Text style={styles.personDate}>
-                                {' '}({formatShortDate(person.createdAt)})
-                              </Text>
-                            )}
-                          </Text>
+                          </View>
+                          <Pressable
+                            accessibilityLabel={`Edit ${person.name || 'unnamed person'}`}
+                            accessibilityRole="button"
+                            hitSlop={10}
+                            onPress={() => openPersonEditor(person)}
+                            style={({ pressed }) => [styles.personEditButton, pressed && styles.editButtonPressed]}>
+                            <SymbolView name={{ ios: 'pencil', android: 'edit', web: 'edit' }} size={18} tintColor={theme.textMuted} />
+                          </Pressable>
                         </View>
-                        <Pressable
-                          accessibilityLabel={`Edit ${person.name || 'unnamed person'}`}
-                          accessibilityRole="button"
-                          hitSlop={10}
-                          onPress={() => openPersonEditor(person)}
-                          style={({ pressed }) => [
-                            styles.personEditButton,
-                            pressed && styles.editButtonPressed,
-                          ]}>
-                          <SymbolView
-                            name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
-                            size={18}
-                            tintColor={theme.textMuted}
-                          />
-                        </Pressable>
-                      </View>
-                    ))}
+                      );
+                    })}
                   </View>
                 )}
               </View>
@@ -1071,7 +1242,29 @@ export default function HomeScreen() {
           )}
         </ScrollView>
 
-        {isAddMenuOpen && (
+        {isSelectionMode ? (
+          <View style={styles.bulkActionBar}>
+            <Text style={styles.bulkSelectionCount}>
+              {selectedPeople.length} selected
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: selectedPeople.length === 0 || isBulkActionSaving }}
+              disabled={selectedPeople.length === 0 || isBulkActionSaving}
+              onPress={() => setIsBulkLabelPickerOpen(true)}
+              style={({ pressed }) => [styles.bulkMoveButton, (selectedPeople.length === 0 || isBulkActionSaving) && styles.bulkActionDisabled, pressed && styles.bulkMoveButtonPressed]}>
+              <Text style={styles.bulkMoveButtonText}>Move</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ disabled: selectedPeople.length === 0 || isBulkActionSaving }}
+              disabled={selectedPeople.length === 0 || isBulkActionSaving}
+              onPress={confirmMoveSelectedPeopleToTrash}
+              style={({ pressed }) => [styles.bulkDeleteButton, (selectedPeople.length === 0 || isBulkActionSaving) && styles.bulkActionDisabled, pressed && styles.bulkDeleteButtonPressed]}>
+              <Text style={styles.bulkDeleteButtonText}>Delete</Text>
+            </Pressable>
+          </View>
+        ) : isAddMenuOpen && (
           <View style={styles.addMenu}>
             <Pressable
               accessibilityRole="button"
@@ -1104,14 +1297,16 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <Pressable
-          accessibilityLabel={isAddMenuOpen ? 'Close add menu' : 'Open add menu'}
-          accessibilityRole="button"
-          accessibilityState={{ expanded: isAddMenuOpen }}
-          onPress={() => setIsAddMenuOpen((current) => !current)}
-          style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
-          <Text style={[styles.addButtonText, isAddMenuOpen && styles.addButtonTextOpen]}>＋</Text>
-        </Pressable>
+        {!isSelectionMode && (
+          <Pressable
+            accessibilityLabel={isAddMenuOpen ? 'Close add menu' : 'Open add menu'}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isAddMenuOpen }}
+            onPress={() => setIsAddMenuOpen((current) => !current)}
+            style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
+            <Text style={[styles.addButtonText, isAddMenuOpen && styles.addButtonTextOpen]}>＋</Text>
+          </Pressable>
+        )}
       </SafeAreaView>
 
       <Modal
@@ -1590,6 +1785,61 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setIsBulkLabelPickerOpen(false)}
+        transparent
+        visible={isBulkLabelPickerOpen}>
+        <Pressable
+          accessibilityLabel="Close move people dialog"
+          onPress={() => setIsBulkLabelPickerOpen(false)}
+          style={styles.modalBackdrop}>
+          <Pressable
+            accessibilityRole="none"
+            onPress={(event) => event.stopPropagation()}
+            style={styles.bulkMoveDialog}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalHeaderCopy}>
+                <Text style={styles.modalEyebrow}>MOVE PEOPLE</Text>
+                <Text style={styles.modalTitle}>
+                  Move {selectedPeople.length} {selectedPeople.length === 1 ? 'person' : 'people'} to…
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Close move people dialog"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isBulkActionSaving }}
+                disabled={isBulkActionSaving}
+                hitSlop={10}
+                onPress={() => setIsBulkLabelPickerOpen(false)}
+                style={({ pressed }) => [styles.modalCloseButton, pressed && styles.modalCloseButtonPressed]}>
+                <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} size={18} tintColor={theme.textMuted} />
+              </Pressable>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.bulkLabelOptions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={isBulkActionSaving}
+                onPress={() => void moveSelectedPeopleToLabel(null)}
+                style={({ pressed }) => [styles.labelOption, pressed && styles.labelOptionPressed]}>
+                <Text style={styles.labelOptionText}>No Label</Text>
+              </Pressable>
+              {labels.map((label) => (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={isBulkActionSaving}
+                  key={label.id}
+                  onPress={() => void moveSelectedPeopleToLabel(label.id)}
+                  style={({ pressed }) => [styles.labelOption, pressed && styles.labelOptionPressed]}>
+                  <Text style={styles.labelOptionText}>{label.name}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -1835,6 +2085,47 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  peopleCountActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  selectionHeadingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectButton: {
+    minHeight: 28,
+    paddingHorizontal: 10,
+    borderRadius: 9,
+    backgroundColor: theme.accentMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectButtonPressed: {
+    opacity: 0.68,
+  },
+  selectButtonText: {
+    color: theme.accent,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  selectAllButton: {
+    minHeight: 28,
+    paddingHorizontal: 9,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectAllButtonPressed: {
+    backgroundColor: theme.surfacePressed,
+  },
+  selectAllButtonText: {
+    color: theme.textSecondary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   section: {
     borderRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
@@ -1924,6 +2215,17 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 6,
   },
+  selectablePersonRow: {
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+  },
+  selectablePersonRowSelected: {
+    backgroundColor: theme.accentMuted,
+  },
+  selectablePersonRowPressed: {
+    backgroundColor: theme.surfacePressed,
+  },
   personRowCondensed: {
     paddingVertical: 2,
   },
@@ -1941,6 +2243,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginLeft: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  personCheckbox: {
+    width: 21,
+    height: 21,
+    marginLeft: 10,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: theme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  personCheckboxSelected: {
+    borderColor: theme.accent,
+    backgroundColor: theme.accent,
   },
   personLine: {
     color: theme.textMuted,
@@ -2048,6 +2364,71 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
+  bulkActionBar: {
+    position: 'absolute',
+    left: 24,
+    right: 24,
+    bottom: 24,
+    minHeight: 60,
+    padding: 8,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.backgroundRaised,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  bulkSelectionCount: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    color: theme.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  bulkMoveButton: {
+    minHeight: 42,
+    paddingHorizontal: 15,
+    borderRadius: 11,
+    backgroundColor: theme.accentMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bulkMoveButtonPressed: {
+    backgroundColor: theme.backgroundSelected,
+    transform: [{ scale: 0.98 }],
+  },
+  bulkMoveButtonText: {
+    color: theme.accent,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  bulkDeleteButton: {
+    minHeight: 42,
+    paddingHorizontal: 15,
+    borderRadius: 11,
+    backgroundColor: theme.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bulkDeleteButtonPressed: {
+    opacity: 0.82,
+    transform: [{ scale: 0.98 }],
+  },
+  bulkDeleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  bulkActionDisabled: {
+    opacity: 0.45,
+  },
   modalKeyboardView: {
     flex: 1,
   },
@@ -2073,6 +2454,27 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     shadowOpacity: 0.32,
     shadowRadius: 28,
     elevation: 16,
+  },
+  bulkMoveDialog: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '78%',
+    padding: 22,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.backgroundRaised,
+    shadowColor: theme.shadow,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.32,
+    shadowRadius: 28,
+    elevation: 16,
+  },
+  bulkLabelOptions: {
+    maxHeight: 320,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
   },
   modalHeader: {
     flexDirection: 'row',
