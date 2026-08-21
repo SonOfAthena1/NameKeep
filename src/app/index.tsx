@@ -108,6 +108,13 @@ const SAMPLE_PEOPLE: Person[] = [
 ];
 
 const CONTROL_CORNER_RADIUS = 14;
+const UNNAMED_PERSON_NAMES = ['Unnamed', 'Person', 'Somebody', 'Name Here', 'Blank'] as const;
+
+function getRandomUnnamedPersonName() {
+  return UNNAMED_PERSON_NAMES[
+    Math.floor(Math.random() * UNNAMED_PERSON_NAMES.length)
+  ];
+}
 
 function sortByOrder<T extends { name: string; createdAt: number }>(
   items: T[],
@@ -448,7 +455,7 @@ export default function HomeScreen() {
     if (isEditorSaving) return;
 
     const updates = {
-      name: personName.trim(),
+      name: personName.trim() || getRandomUnnamedPersonName(),
       description: personDescription.trim(),
       labelId: personLabelId,
     };
