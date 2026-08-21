@@ -46,38 +46,58 @@ export default function RememberPersonScreen() {
   }, [db, personId]);
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.content}>
-        <Text style={styles.eyebrow}>MEMORY REVEAL</Text>
-        {isLoaded && person ? (
-          <>
-            <Text style={styles.name}>{person.name}</Text>
-            {!!person.description && (
-              <Text style={styles.description}>{person.description}</Text>
-            )}
-            {labelName && <Text style={styles.label}>{labelName}</Text>}
-          </>
-        ) : isLoaded ? (
-          <Text style={styles.message}>
-            This person is no longer available.
+    <View style={styles.screen}>
+      <View pointerEvents="none" style={styles.glowTop} />
+      <View pointerEvents="none" style={styles.glowBottom} />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandMark}>
+              <Text style={styles.brandInitial}>N</Text>
+            </View>
+            <Text style={styles.brandName}>NameKeep</Text>
+          </View>
+        </View>
+        <View style={styles.content}>
+          <Text style={styles.eyebrow}>MEMORY REVEAL</Text>
+          {isLoaded && person ? (
+            <>
+              <Text style={styles.name}>{person.name}</Text>
+              {!!person.description && (
+                <Text style={styles.description}>{person.description}</Text>
+              )}
+              {labelName && <Text style={styles.label}>{labelName}</Text>}
+            </>
+          ) : isLoaded ? (
+            <Text style={styles.message}>
+              This person is no longer available.
+            </Text>
+          ) : (
+            <Text style={styles.message}>Loading…</Text>
+          )}
+          <Text
+            accessibilityRole="button"
+            onPress={() => router.back()}
+            style={styles.back}>
+            Back to home
           </Text>
-        ) : (
-          <Text style={styles.message}>Loading…</Text>
-        )}
-        <Text
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          style={styles.back}>
-          Back to NameKeep
-        </Text>
-      </View>
-    </SafeAreaView>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
-    screen: { flex: 1, backgroundColor: theme.background },
+    screen: { flex: 1, backgroundColor: theme.background, overflow: 'hidden' },
+    safeArea: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center' },
+    glowTop: { position: 'absolute', width: 320, height: 320, borderRadius: 160, backgroundColor: theme.glowTop, opacity: 0.18, top: -190, right: -120 },
+    glowBottom: { position: 'absolute', width: 280, height: 280, borderRadius: 140, backgroundColor: theme.glowBottom, opacity: 0.1, bottom: -170, left: -150 },
+    header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, flexDirection: 'row', justifyContent: 'flex-end' },
+    brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    brandMark: { width: 30, height: 30, borderRadius: 9, backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-4deg' }] },
+    brandInitial: { color: theme.background, fontSize: 18, fontWeight: '900' },
+    brandName: { color: theme.text, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
     content: { flex: 1, justifyContent: 'center', padding: 30 },
     eyebrow: {
       color: theme.accent,
