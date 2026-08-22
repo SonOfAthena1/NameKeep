@@ -69,6 +69,7 @@ import {
   requestMemoryReminderPermission,
   scheduleMemoryReminders,
 } from '@/lib/memory-reminders';
+import { getRandomUnnamedPersonName } from '@/lib/names';
 
 const SAMPLE_LABELS: Label[] = [
   { id: 'work', name: 'Work', color: 'green', createdAt: 1_755_907_200_000 },
@@ -120,15 +121,6 @@ const SAMPLE_PEOPLE: Person[] = [
 ];
 
 const CONTROL_CORNER_RADIUS = 14;
-const UNNAMED_PERSON_NAMES = ['Unnamed', 'Person', 'Somebody', 'Name Here', 'Blank'] as const;
-
-/** Picks a friendly placeholder when a person does not have a name yet. */
-function getRandomUnnamedPersonName() {
-  return UNNAMED_PERSON_NAMES[
-    Math.floor(Math.random() * UNNAMED_PERSON_NAMES.length)
-  ];
-}
-
 /** Sorts named items by date or name without changing the original list. */
 function sortByOrder<T extends { name: string; createdAt: number }>(
   items: T[],

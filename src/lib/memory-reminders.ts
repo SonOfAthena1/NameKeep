@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import type { MemoryReminderInterval, Person } from '@/database/types';
+import { isUnnamedPersonName } from '@/lib/names';
 
 const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
 const MEMORY_REMINDER_KIND = 'memory-reminder';
@@ -24,6 +25,22 @@ function isMemoryReminderData(value: unknown): value is MemoryReminderData {
 /** Checks whether this device can schedule notifications. */
 function notificationsAreAvailable() {
   return Platform.OS !== 'web';
+}
+
+/** Creates a quiz prompt without revealing a placeholder name as though it were real. */
+function getReminderBody(person: Person) {
+  const description = person.description.trim();
+  if (description) {
+    return `You met someone described as: “${description}”\nDo you remember their name? Tap to reveal it.`;
+  }
+
+  const name = person.name.trim();
+  if (name && !isUnnamedPersonName(name)) {
+    const initial = Array.from(name)[0]?.toUpperCase();
+    return `You met someone recently whose name started with: ${initial}. Do you remember their name? Tap to reveal it.`;
+  }
+
+  return 'You met someone recently, but their name and description were not saved. Tap to reveal it.';
 }
 
 /** Asks for notification access when the device has not granted it yet. */
@@ -49,7 +66,7 @@ export async function scheduleMemoryReminders(
       Notifications.scheduleNotificationAsync({
         content: {
           title: 'NameKeep memory reminder',
-          body: `You met someone described as: “${person.description || 'No description saved.'}”\nDo you remember their name? Tap to reveal it.`,
+          body: getReminderBody(person),
           data: { kind: MEMORY_REMINDER_KIND, personId: person.id },
         },
         trigger: {
