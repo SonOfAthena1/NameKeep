@@ -69,7 +69,7 @@ import {
   requestMemoryReminderPermission,
   scheduleMemoryReminders,
 } from '@/lib/memory-reminders';
-import { getRandomUnnamedPersonName } from '@/lib/names';
+import { getRandomUnnamedPersonName, isUnnamedPersonName } from '@/lib/names';
 
 const SAMPLE_LABELS: Label[] = [
   { id: 'work', name: 'Work', color: 'green', createdAt: 1_755_907_200_000 },
@@ -257,6 +257,17 @@ export default function HomeScreen() {
         setCondensedView(settings.condensedView);
         setMemoryReminderIntervals(settings.memoryReminderIntervals);
         setThemePreference(settings.themePreference);
+
+        const unnamedPersonIds = loadedPeople
+          .filter((person) => isUnnamedPersonName(person.name))
+          .map((person) => person.id);
+        if (unnamedPersonIds.length > 0) {
+          try {
+            await cancelMemoryRemindersForPeople(unnamedPersonIds);
+          } catch (error) {
+            console.error('Could not cancel reminders for unnamed people', error);
+          }
+        }
       } catch (error) {
         if (cancelled) return;
         console.error('Could not load database state', error);
@@ -664,6 +675,9 @@ export default function HomeScreen() {
         const personId = editor.id;
         const updated = await updatePersonRecord(db, personId, updates);
         if (!updated) throw new Error(`Person ${personId} was not found.`);
+        if (isUnnamedPersonName(updates.name)) {
+          await cancelMemoryRemindersForPeople([personId]);
+        }
         setPeople((current) =>
           current.map((person) =>
             person.id === personId ? { ...person, ...updates } : person,
