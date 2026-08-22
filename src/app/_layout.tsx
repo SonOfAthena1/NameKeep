@@ -18,6 +18,7 @@ if (Platform.OS !== 'web') {
   });
 }
 
+/** Sets up the app-wide theme provider and navigation shell. */
 export default function RootLayout() {
   return (
     <AppThemeProvider>
@@ -26,6 +27,7 @@ export default function RootLayout() {
   );
 }
 
+/** Applies the selected colors to navigation and opens the app database. */
 function RootNavigator() {
   const { colorScheme } = useAppTheme();
   const colors = Colors[colorScheme];

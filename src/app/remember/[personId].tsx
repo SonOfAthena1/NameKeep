@@ -10,6 +10,7 @@ import { getActivePerson } from '@/database/people-repository';
 import type { Person } from '@/database/types';
 import { useTheme } from '@/hooks/use-theme';
 
+/** Shows the answer after someone opens a memory-reminder notification. */
 export default function RememberPersonScreen() {
   const { personId } = useLocalSearchParams<{ personId: string }>();
   const db = useSQLiteContext();
@@ -87,6 +88,7 @@ export default function RememberPersonScreen() {
   );
 }
 
+/** Creates this screen's colors and layout for the active theme. */
 const createStyles = (theme: AppTheme) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: theme.background, overflow: 'hidden' },

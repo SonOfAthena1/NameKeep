@@ -2,6 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
+/** Creates the dated filename used for a people export. */
 function getExportFileName(): string {
   const date = new Date().toISOString().slice(0, 10);
   return `namekeep-people-${date}.csv`;
@@ -22,6 +23,7 @@ type SaveFilePickerWindow = Window & {
   }>;
 };
 
+/** Starts a browser download when the save-file picker is unavailable. */
 function downloadOnWeb(contents: string, fileName: string): void {
   const url = URL.createObjectURL(
     new Blob([contents], { type: 'text/csv;charset=utf-8' }),
@@ -36,6 +38,7 @@ function downloadOnWeb(contents: string, fileName: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** Lets a web user choose where to save an export when their browser supports it. */
 async function saveOnWeb(contents: string, fileName: string): Promise<void> {
   const saveFilePicker = (window as SaveFilePickerWindow).showSaveFilePicker;
   if (!saveFilePicker) {
@@ -64,6 +67,7 @@ async function saveOnWeb(contents: string, fileName: string): Promise<void> {
   }
 }
 
+/** Saves or shares a people CSV using the right option for the current device. */
 export async function exportPeopleCsv(contents: string): Promise<void> {
   const fileName = getExportFileName();
 

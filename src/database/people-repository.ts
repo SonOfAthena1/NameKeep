@@ -36,6 +36,7 @@ const PERSON_COLUMNS = `
   deleted_at
 `;
 
+/** Changes database-style person fields into the shape used by the app. */
 function mapPerson(row: PersonRow): StoredPerson {
   return {
     id: row.id,
@@ -48,6 +49,7 @@ function mapPerson(row: PersonRow): StoredPerson {
   };
 }
 
+/** Gets every person that has not been moved to Trash. */
 export async function listActivePeople(
   db: SQLiteDatabase,
 ): Promise<StoredPerson[]> {
@@ -60,6 +62,7 @@ export async function listActivePeople(
   return rows.map(mapPerson);
 }
 
+/** Finds one person, as long as they are not in Trash. */
 export async function getActivePerson(
   db: SQLiteDatabase,
   id: string,
@@ -73,6 +76,7 @@ export async function getActivePerson(
   return row ? mapPerson(row) : null;
 }
 
+/** Gets the people in Trash, newest deletion first. */
 export async function listTrashedPeople(
   db: SQLiteDatabase,
 ): Promise<StoredTrashedPerson[]> {
@@ -91,6 +95,7 @@ export async function listTrashedPeople(
   });
 }
 
+/** Saves a new person and returns the saved record. */
 export async function createPerson(
   db: SQLiteDatabase,
   input: CreatePersonInput,
@@ -137,6 +142,7 @@ export async function createPerson(
   return person;
 }
 
+/** Updates a saved person's details. Returns false when they are not active. */
 export async function updatePerson(
   db: SQLiteDatabase,
   id: string,
@@ -162,6 +168,7 @@ export async function updatePerson(
   return result.changes > 0;
 }
 
+/** Moves an active person to Trash. */
 export async function movePersonToTrash(
   db: SQLiteDatabase,
   id: string,
@@ -178,6 +185,7 @@ export async function movePersonToTrash(
   return result.changes > 0;
 }
 
+/** Restores a person from Trash and drops a label that no longer exists. */
 export async function restorePerson(
   db: SQLiteDatabase,
   id: string,
@@ -204,6 +212,7 @@ export async function restorePerson(
   return result.changes > 0;
 }
 
+/** Deletes a person from Trash for good. */
 export async function deletePersonPermanently(
   db: SQLiteDatabase,
   id: string,
@@ -217,6 +226,7 @@ export async function deletePersonPermanently(
   return result.changes > 0;
 }
 
+/** Permanently removes everyone in Trash and returns how many were removed. */
 export async function emptyTrash(db: SQLiteDatabase): Promise<number> {
   const result = await db.runAsync(
     'DELETE FROM people WHERE deleted_at IS NOT NULL',

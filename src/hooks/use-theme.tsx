@@ -18,6 +18,7 @@ type AppThemeContextValue = {
 
 const AppThemeContext = createContext<AppThemeContextValue | null>(null);
 
+/** Shares the selected color theme with the whole app. */
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const systemColorScheme = useColorScheme();
   const [themePreference, setThemePreference] =
@@ -36,6 +37,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   return <AppThemeContext.Provider value={value}>{children}</AppThemeContext.Provider>;
 }
 
+/** Gets the theme choice and the function that changes it. */
 export function useAppTheme() {
   const context = useContext(AppThemeContext);
 
@@ -46,6 +48,7 @@ export function useAppTheme() {
   return context;
 }
 
+/** Gets the colors for the currently active theme. */
 export function useTheme() {
   const { colorScheme } = useAppTheme();
 

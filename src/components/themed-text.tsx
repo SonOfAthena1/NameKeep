@@ -8,6 +8,7 @@ export type ThemedTextProps = TextProps & {
   themeColor?: ThemeColor;
 };
 
+/** Renders text with the current theme's color and a named text style. */
 export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
   const theme = useTheme();
 

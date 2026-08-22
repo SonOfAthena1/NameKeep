@@ -4,6 +4,12 @@ import { withWriteTransaction } from '@/database/transactions';
 
 const DATABASE_VERSION = 7;
 
+/**
+ * Brings an existing NameKeep database up to the version this app understands.
+ *
+ * @param db The database opened by Expo SQLite.
+ * @throws {Error} When the database comes from a newer app version.
+ */
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync(`
     PRAGMA foreign_keys = ON;

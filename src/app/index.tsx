@@ -122,12 +122,14 @@ const SAMPLE_PEOPLE: Person[] = [
 const CONTROL_CORNER_RADIUS = 14;
 const UNNAMED_PERSON_NAMES = ['Unnamed', 'Person', 'Somebody', 'Name Here', 'Blank'] as const;
 
+/** Picks a friendly placeholder when a person does not have a name yet. */
 function getRandomUnnamedPersonName() {
   return UNNAMED_PERSON_NAMES[
     Math.floor(Math.random() * UNNAMED_PERSON_NAMES.length)
   ];
 }
 
+/** Sorts named items by date or name without changing the original list. */
 function sortByOrder<T extends { name: string; createdAt: number }>(
   items: T[],
   order: SortOrder,
@@ -142,6 +144,7 @@ function sortByOrder<T extends { name: string; createdAt: number }>(
   });
 }
 
+/** Turns a saved date into a short month/day/year label. */
 function formatShortDate(timestamp: number) {
   const date = new Date(timestamp);
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -155,6 +158,7 @@ type Editor = {
   id: string | null;
 } | null;
 
+/** Shows the people list and handles the app's main actions. */
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [labels, setLabels] = useState<Label[]>(SAMPLE_LABELS);
@@ -359,6 +363,7 @@ export default function HomeScreen() {
     visiblePeople.length > 0 &&
     visiblePeople.every((person) => selectedPersonIds.has(person.id));
 
+  /** Collapses or expands one label section. */
   function toggleLabel(labelId: string) {
     setCollapsedLabelIds((current) => {
       const next = new Set(current);
@@ -371,6 +376,7 @@ export default function HomeScreen() {
     });
   }
 
+  /** Collapses every visible section, or expands them when already collapsed. */
   function toggleAllLabels() {
     const visibleLabelIds = sections.map(({ label }) => label.id);
     setCollapsedLabelIds((current) => {
@@ -384,12 +390,14 @@ export default function HomeScreen() {
     });
   }
 
+  /** Leaves multi-select mode and clears the current selection. */
   function exitSelectionMode() {
     setIsSelectionMode(false);
     setSelectedPersonIds(new Set());
     setIsBulkLabelPickerOpen(false);
   }
 
+  /** Adds or removes one person from the current selection. */
   function togglePersonSelection(personId: string) {
     setSelectedPersonIds((current) => {
       const next = new Set(current);
@@ -402,6 +410,7 @@ export default function HomeScreen() {
     });
   }
 
+  /** Selects every visible person, or clears them when all are selected. */
   function toggleVisiblePeopleSelection() {
     setSelectedPersonIds((current) => {
       const next = new Set(current);
@@ -414,6 +423,7 @@ export default function HomeScreen() {
     });
   }
 
+  /** Moves all selected people to a label, or removes their labels. */
   async function moveSelectedPeopleToLabel(labelId: string | null) {
     if (selectedPeople.length === 0 || isBulkActionSaving) return;
 
@@ -444,6 +454,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Asks before moving the current selection to Trash. */
   function confirmMoveSelectedPeopleToTrash() {
     if (selectedPeople.length === 0 || isBulkActionSaving) return;
 
@@ -493,11 +504,13 @@ export default function HomeScreen() {
     ]);
   }
 
+  /** Opens settings and closes the add menu. */
   function openSettings() {
     setIsAddMenuOpen(false);
     setIsSettingsOpen(true);
   }
 
+  /** Opens a blank editor for a person or label. */
   function openCreateModal(kind: 'person' | 'label') {
     setIsAddMenuOpen(false);
     if (kind === 'person') {
@@ -512,6 +525,7 @@ export default function HomeScreen() {
     setEditor({ kind, id: null });
   }
 
+  /** Opens the editor with one person's saved details. */
   function openPersonEditor(person: Person) {
     setIsAddMenuOpen(false);
     setPersonName(person.name);
@@ -520,6 +534,7 @@ export default function HomeScreen() {
     setEditor({ kind: 'person', id: person.id });
   }
 
+  /** Opens the editor with one label's saved details. */
   function openLabelEditor(label: Label) {
     setIsAddMenuOpen(false);
     setLabelName(label.name);
@@ -527,6 +542,7 @@ export default function HomeScreen() {
     setEditor({ kind: 'label', id: label.id });
   }
 
+  /** Closes the editor and clears its temporary choices. */
   function closeEditor() {
     setEditor(null);
     setIsLabelPickerOpen(false);
@@ -537,6 +553,7 @@ export default function HomeScreen() {
     setLabelColor(defaultLabelColor);
   }
 
+  /** Logs a save problem and shows a clear message without changing the screen. */
   function showMutationError(action: string, error: unknown) {
     console.error(`Could not ${action}`, error);
     const message = `NameKeep couldn’t ${action}. Your saved data has not been changed.`;
@@ -547,6 +564,7 @@ export default function HomeScreen() {
     Alert.alert('Couldn’t save changes', message);
   }
 
+  /** Saves a setting first, then updates the screen after it succeeds. */
   async function persistSetting(
     patch: SettingsPatch,
     applyToApp: () => void,
@@ -559,6 +577,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Saves and applies a new color theme choice. */
   function changeThemePreference(preference: ThemePreference) {
     void persistSetting(
       { themePreference: preference },
@@ -566,6 +585,7 @@ export default function HomeScreen() {
     );
   }
 
+  /** Saves the color used for newly created labels. */
   function changeDefaultLabelColor(color: LabelColor) {
     void persistSetting(
       { defaultLabelColor: color },
@@ -573,6 +593,7 @@ export default function HomeScreen() {
     );
   }
 
+  /** Saves the label picked automatically for new people. */
   function changeDefaultLabelId(labelId: string | null) {
     void persistSetting(
       { defaultLabelId: labelId },
@@ -580,6 +601,7 @@ export default function HomeScreen() {
     );
   }
 
+  /** Saves how label sections are sorted. */
   function changeLabelSortOrder(order: SortOrder) {
     void persistSetting(
       { labelSortOrder: order },
@@ -587,6 +609,7 @@ export default function HomeScreen() {
     );
   }
 
+  /** Saves how people are sorted inside each section. */
   function changePeopleSortOrder(order: SortOrder) {
     void persistSetting(
       { peopleSortOrder: order },
@@ -594,10 +617,12 @@ export default function HomeScreen() {
     );
   }
 
+  /** Saves whether short dates appear with people. */
   function changeShowDate(value: boolean) {
     void persistSetting({ showDate: value }, () => setShowDate(value));
   }
 
+  /** Saves whether the people list uses its tighter layout. */
   function changeCondensedView(value: boolean) {
     void persistSetting(
       { condensedView: value },
@@ -605,6 +630,7 @@ export default function HomeScreen() {
     );
   }
 
+  /** Adds or removes one reminder delay from the saved choices. */
   async function changeMemoryReminderInterval(
     interval: MemoryReminderInterval,
     enabled: boolean,
@@ -630,6 +656,7 @@ export default function HomeScreen() {
     );
   }
 
+  /** Checks and saves the person currently open in the editor. */
   async function savePerson() {
     if (isEditorSaving) return;
 
@@ -669,6 +696,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Checks and saves the label currently open in the editor. */
   async function saveLabel() {
     if (isEditorSaving) return;
 
@@ -712,6 +740,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Opens the right delete confirmation for the item being edited. */
   function deleteEditedItem() {
     if (!editor?.id) {
       return;
@@ -771,12 +800,14 @@ export default function HomeScreen() {
     );
   }
 
+  /** Closes the label deletion dialog and clears its temporary choices. */
   function closeLabelDeleteDialog() {
     setLabelDeleteId(null);
     setDeleteDestinationLabelId(null);
     setIsDeleteDestinationPickerOpen(false);
   }
 
+  /** Stops label deletion unless the delete request is already running. */
   function cancelLabelDeletion() {
     if (isLabelDeleting) return;
 
@@ -787,6 +818,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Deletes the chosen label and moves or trashes its people as selected. */
   async function confirmLabelDeletion(movePeopleToTrash: boolean) {
     if (!labelDeleteId || isLabelDeleting) {
       return;
@@ -849,6 +881,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Restores one person from Trash to the main list. */
   async function restorePerson(personId: string) {
     const restoredPerson = trash.find((person) => person.id === personId);
     if (!restoredPerson) return;
@@ -876,6 +909,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Permanently removes one person from Trash. */
   async function deletePersonForever(personId: string) {
     try {
       const deleted = await deletePersonPermanentlyRecord(db, personId);
@@ -886,6 +920,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Permanently removes everyone in Trash. */
   async function emptyTrash() {
     try {
       await emptyTrashRecords(db);
@@ -895,6 +930,7 @@ export default function HomeScreen() {
     }
   }
 
+  /** Saves imported labels and people together, then updates the main list. */
   async function importPeople(
     importedPeople: Person[],
     importedLabels: Label[],
@@ -1915,6 +1951,7 @@ export default function HomeScreen() {
   );
 }
 
+/** Creates the home screen's colors and layout for the active theme. */
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   screen: {
     flex: 1,

@@ -1,3 +1,4 @@
+/** Returns up to two initials from a person's name. */
 export function getInitials(name: string) {
   return name
     .split(' ')

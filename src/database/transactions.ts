@@ -1,9 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 import { Platform } from 'react-native';
 
-/**
- * Uses native exclusive transactions while providing the supported equivalent
- * on web, where Expo SQLite does not implement exclusive transactions.
+/** 
+ * Runs a database write as one all-or-nothing operation on every platform. 
  */
 export async function withWriteTransaction(
   db: SQLiteDatabase,

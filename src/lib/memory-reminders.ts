@@ -11,6 +11,7 @@ type MemoryReminderData = {
   personId: string;
 };
 
+/** Checks whether notification data belongs to one of this app's reminders. */
 function isMemoryReminderData(value: unknown): value is MemoryReminderData {
   return (
     typeof value === 'object' &&
@@ -20,10 +21,12 @@ function isMemoryReminderData(value: unknown): value is MemoryReminderData {
   );
 }
 
+/** Checks whether this device can schedule notifications. */
 function notificationsAreAvailable() {
   return Platform.OS !== 'web';
 }
 
+/** Asks for notification access when the device has not granted it yet. */
 export async function requestMemoryReminderPermission(): Promise<boolean> {
   if (!notificationsAreAvailable()) return false;
 
@@ -34,6 +37,7 @@ export async function requestMemoryReminderPermission(): Promise<boolean> {
   return requested.granted;
 }
 
+/** Schedules one reminder for every chosen interval after a person is saved. */
 export async function scheduleMemoryReminders(
   person: Person,
   intervals: MemoryReminderInterval[],
@@ -57,6 +61,7 @@ export async function scheduleMemoryReminders(
   );
 }
 
+/** Cancels every scheduled memory reminder for the given people. */
 export async function cancelMemoryRemindersForPeople(
   personIds: string[],
 ): Promise<void> {
@@ -76,6 +81,7 @@ export async function cancelMemoryRemindersForPeople(
   );
 }
 
+/** Gets the person ID from a memory-reminder notification tap. */
 export function getMemoryReminderPersonId(
   response: Notifications.NotificationResponse | null | undefined,
 ): string | null {

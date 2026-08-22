@@ -43,6 +43,7 @@ export type PeopleImportPlan = {
 
 export class CsvImportError extends Error {}
 
+/** Cleans up a CSV column name before matching it. */
 function normalizeHeader(header: string): string {
   return header
     .replace(/^\uFEFF/, '')
@@ -51,23 +52,34 @@ function normalizeHeader(header: string): string {
     .replace(/[\s-]+/g, '_');
 }
 
+/** Cleans imported text and removes CSV formula protection when present. */
 function normalizeText(value: string | undefined): string {
   const text = String(value ?? '').normalize('NFC').trim();
   return EXPORTED_FORMULA_PREFIX.test(text) ? text.slice(1) : text;
 }
 
+/** Makes text consistent for case-insensitive duplicate checks. */
 function normalizeForComparison(value: string): string {
   return value.normalize('NFKC').trim().toLocaleLowerCase();
 }
 
+/** Checks whether a value is one of the label colors this app supports. */
 function isLabelColor(value: string): value is LabelColor {
   return VALID_COLORS.has(value as LabelColor);
 }
 
+/** Creates a temporary unique ID for an imported label or person. */
 function createLocalId(prefix: 'label' | 'person'): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * Reads and checks a people CSV file before it is imported.
+ *
+ * @param contents The text from the selected CSV file.
+ * @returns Valid people plus the row numbers that could not be used.
+ * @throws {CsvImportError} When the file itself cannot be imported.
+ */
 export function parsePeopleCsv(contents: string): ParsedPeopleCsv {
   if (!contents.trim()) {
     throw new CsvImportError('The selected CSV file is empty.');
@@ -142,6 +154,12 @@ export function parsePeopleCsv(contents: string): ParsedPeopleCsv {
   return { people, invalidRows: [...invalidRows].sort((a, b) => a - b) };
 }
 
+/**
+ * Prepares new labels and people without changing the database yet.
+ *
+ * It reuses matching labels, skips people already saved, and catches label
+ * color conflicts so the caller can save one clean plan.
+ */
 export function createPeopleImportPlan(
   parsed: ParsedPeopleCsv,
   existingPeople: Person[],

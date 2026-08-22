@@ -102,6 +102,7 @@ const MEMORY_REMINDER_OPTIONS: { value: MemoryReminderInterval; label: string }[
   { value: 14, label: '2 weeks later' },
 ];
 
+/** Displays settings, data import/export, and the Trash controls. */
 export function SettingsScreen({
   labels,
   people,
@@ -153,10 +154,12 @@ export function SettingsScreen({
     ? `${memoryReminderIntervals.length} selected`
     : 'Off';
 
+  /** Opens a picker, or closes it when it is already open. */
   function togglePicker(nextPicker: Exclude<Picker, null>) {
     setPicker((current) => (current === nextPicker ? null : nextPicker));
   }
 
+  /** Opens the support page and explains if that did not work. */
   function openSupport() {
     void Linking.openURL(SUPPORT_URL).catch((error) => {
       console.error('Could not open support page', error);
@@ -164,6 +167,7 @@ export function SettingsScreen({
     });
   }
 
+  /** Asks before permanently removing one person from Trash. */
   function confirmDeleteForever(person: TrashedPerson) {
     const performDelete = () => onDeleteForever(person.id);
     const message = `Permanently delete “${person.name || 'this person'}”? This cannot be undone.`;
@@ -179,6 +183,7 @@ export function SettingsScreen({
     ]);
   }
 
+  /** Asks before permanently removing everyone in Trash. */
   function confirmEmptyTrash() {
     const message = `Permanently delete all ${trash.length} ${trash.length === 1 ? 'person' : 'people'} in Trash? This cannot be undone.`;
 
@@ -193,6 +198,7 @@ export function SettingsScreen({
     ]);
   }
 
+  /** Creates and saves a CSV copy of the current people list. */
   async function exportPeople() {
     if (people.length === 0 || isExporting) {
       if (people.length === 0) {
@@ -215,6 +221,7 @@ export function SettingsScreen({
     }
   }
 
+  /** Shows a short message using the right dialog for the current platform. */
   function showMessage(title: string, message: string) {
     if (Platform.OS === 'web') {
       globalThis.alert(`${title}\n\n${message}`);
@@ -223,6 +230,7 @@ export function SettingsScreen({
     Alert.alert(title, message);
   }
 
+  /** Reads a selected CSV, checks it, and asks the app to save the result. */
   async function importPeople() {
     if (isImporting) return;
 
@@ -324,6 +332,7 @@ export function SettingsScreen({
     }
   }
 
+  /** Opens the device's file picker for a CSV import. */
   function chooseImportFile() {
     setIsImportGuideOpen(false);
     if (Platform.OS === 'web') {
@@ -591,27 +600,33 @@ export function SettingsScreen({
   );
 }
 
+/** Provides the common background and safe area for settings views. */
 function ScreenFrame({ children, styles }: { children: React.ReactNode; styles: ReturnType<typeof createStyles> }) {
   const { colorScheme } = useAppTheme();
   return <View style={styles.screen}><StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} /><View pointerEvents="none" style={styles.glowTop} /><SafeAreaView style={styles.safeArea}>{children}</SafeAreaView></View>;
 }
 
+/** Shows a settings page title with a back button. */
 function SettingsHeader({ title, onBack, styles, theme }: { title: string; onBack: () => void; styles: ReturnType<typeof createStyles>; theme: AppTheme }) {
   return <View style={styles.header}><Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={onBack} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}><SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} size={22} tintColor={theme.text} /></Pressable><Text style={styles.headerTitle}>{title}</Text><View style={styles.headerSpacer} /></View>;
 }
 
+/** Groups related settings under a small heading. */
 function Section({ title, children, styles }: { title: string; children: React.ReactNode; styles: ReturnType<typeof createStyles> }) {
   return <View style={styles.section}><Text style={styles.sectionTitle}>{title}</Text><View style={styles.groupCard}>{children}</View></View>;
 }
 
+/** Renders one pressable row in a settings group. */
 function SettingRow({ title, subtitle, value, onPress, expanded, disabled, leading, styles, theme }: { title: string; subtitle?: string; value?: string; onPress: () => void; expanded?: boolean; disabled?: boolean; leading?: React.ReactNode; styles: ReturnType<typeof createStyles>; theme: AppTheme }) {
   return <Pressable accessibilityRole="button" accessibilityState={{ disabled, ...(expanded === undefined ? {} : { expanded }) }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.settingRow, disabled && styles.settingRowDisabled, pressed && styles.rowPressed]}>{leading}<View style={styles.rowCopy}><Text style={styles.rowTitle}>{title}</Text>{subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}</View>{value && <Text numberOfLines={1} style={styles.rowValue}>{value}</Text>}<SymbolView name={{ ios: expanded ? 'chevron.up' : 'chevron.right', android: expanded ? 'keyboard_arrow_up' : 'chevron_right', web: expanded ? 'keyboard_arrow_up' : 'chevron_right' }} size={19} tintColor={theme.textFaint} /></Pressable>;
 }
 
+/** Renders the choices for a one-option-at-a-time setting. */
 function ChoiceList<T extends string | null>({ options, selected, onSelect, styles, theme }: { options: { value: T; label: string }[]; selected: T; onSelect: (value: T) => void; styles: ReturnType<typeof createStyles>; theme: AppTheme }) {
   return <View style={styles.choiceList}>{options.map((option) => <Pressable key={option.value ?? 'none'} accessibilityRole="radio" accessibilityState={{ checked: option.value === selected }} onPress={() => onSelect(option.value)} style={({ pressed }) => [styles.choiceRow, option.value === selected && styles.choiceRowSelected, pressed && styles.rowPressed]}><Text style={styles.choiceText}>{option.label}</Text>{option.value === selected && <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={17} tintColor={theme.accent} />}</Pressable>)}</View>;
 }
 
+/** Creates settings screen colors and layout for the active theme. */
 const createStyles = (theme: AppTheme) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: theme.background, overflow: 'hidden' },
   safeArea: { flex: 1, width: '100%', maxWidth: 720, alignSelf: 'center' },

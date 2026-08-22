@@ -35,6 +35,7 @@ export type DeleteLabelResult = {
   deletedAt: number;
 };
 
+/** Changes database-style label fields into the shape used by the app. */
 function mapLabel(row: LabelRow): StoredLabel {
   return {
     id: row.id,
@@ -46,6 +47,7 @@ function mapLabel(row: LabelRow): StoredLabel {
   };
 }
 
+/** Gets every label that has not been deleted. */
 export async function listActiveLabels(
   db: SQLiteDatabase,
 ): Promise<StoredLabel[]> {
@@ -58,6 +60,7 @@ export async function listActiveLabels(
   return rows.map(mapLabel);
 }
 
+/** Saves a new label and returns the saved record. */
 export async function createLabel(
   db: SQLiteDatabase,
   input: CreateLabelInput,
@@ -100,6 +103,7 @@ export async function createLabel(
   return label;
 }
 
+/** Updates a saved label. Returns false when the label is not active. */
 export async function updateLabel(
   db: SQLiteDatabase,
   id: string,
@@ -123,6 +127,12 @@ export async function updateLabel(
   return result.changes > 0;
 }
 
+/**
+ * Deletes a label and safely deals with every person using it.
+ *
+ * People can be moved to another label, left without one, or moved to Trash.
+ * The changes happen together so nothing is left halfway done.
+ */
 export async function deleteLabelAndHandlePeople(
   db: SQLiteDatabase,
   id: string,

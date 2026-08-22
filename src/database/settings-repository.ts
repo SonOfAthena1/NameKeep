@@ -21,6 +21,7 @@ type SettingsRow = {
   updated_at: number;
 };
 
+/** Reads saved reminder intervals and ignores unsupported or broken values. */
 function parseMemoryReminderIntervals(value: string): MemoryReminderInterval[] {
   try {
     const intervals = JSON.parse(value);
@@ -33,6 +34,7 @@ function parseMemoryReminderIntervals(value: string): MemoryReminderInterval[] {
 
 export type SettingsPatch = Partial<Omit<AppSettings, 'updatedAt'>>;
 
+/** Changes database-style settings fields into the shape used by the app. */
 function mapSettings(row: SettingsRow): AppSettings {
   return {
     themePreference: row.theme_preference,
@@ -47,6 +49,7 @@ function mapSettings(row: SettingsRow): AppSettings {
   };
 }
 
+/** Gets the app's single saved settings record. */
 export async function getSettings(
   db: SQLiteDatabase,
 ): Promise<AppSettings> {
@@ -71,6 +74,7 @@ export async function getSettings(
   return mapSettings(row);
 }
 
+/** Replaces all saved settings with the provided values. */
 export async function saveSettings(
   db: SQLiteDatabase,
   settings: Omit<AppSettings, 'updatedAt'>,
@@ -107,6 +111,7 @@ export async function saveSettings(
   return { ...settings, updatedAt };
 }
 
+/** Updates only the settings included in a patch. */
 export async function updateSettings(
   db: SQLiteDatabase,
   patch: SettingsPatch,
