@@ -54,7 +54,7 @@ export default function RememberPersonScreen() {
         <View style={styles.header}>
           <View style={styles.brandRow}>
             <View style={styles.brandMark}>
-              <Text style={styles.brandInitial}>N</Text>
+              <Text style={styles.brandInitial}>NK</Text>
             </View>
             <Text style={styles.brandName}>NameKeep</Text>
           </View>
@@ -98,7 +98,7 @@ const createStyles = (theme: AppTheme) =>
     header: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 16, flexDirection: 'row', justifyContent: 'flex-end' },
     brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     brandMark: { width: 30, height: 30, borderRadius: 9, backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '-4deg' }] },
-    brandInitial: { color: theme.background, fontSize: 18, fontWeight: '900' },
+    brandInitial: { color: theme.background, fontSize: 14, fontWeight: '900', letterSpacing: 0.5, transform: [{ translateY: -1 }] },
     brandName: { color: theme.text, fontSize: 17, fontWeight: '700', letterSpacing: -0.3 },
     content: { flex: 1, justifyContent: 'center', padding: 30 },
     eyebrow: {

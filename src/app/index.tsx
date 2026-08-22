@@ -1135,7 +1135,7 @@ export default function HomeScreen() {
 
           <View style={styles.brandRow}>
             <View style={styles.brandMark}>
-              <Text style={styles.brandInitial}>N</Text>
+              <Text style={styles.brandInitial}>NK</Text>
             </View>
             <Text style={styles.brandName}>NameKeep</Text>
           </View>
@@ -2212,8 +2212,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   brandInitial: {
     color: theme.background,
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '900',
+    letterSpacing: 0.5,
+    transform: [{ translateY: -1 }],
   },
   brandName: {
     color: theme.text,
