@@ -2,7 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { withWriteTransaction } from '@/database/transactions';
 
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 /**
  * Brings an existing NameKeep database up to the version this app understands.
@@ -75,6 +75,11 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
               'green', 'blue', 'violet', 'pink', 'red',
               'orange', 'amber', 'teal', 'gray'
             )),
+          no_label_color TEXT NOT NULL DEFAULT 'green'
+            CHECK (no_label_color IN (
+              'green', 'blue', 'violet', 'pink', 'red',
+              'orange', 'amber', 'teal', 'gray'
+            )),
           default_label_id TEXT,
           label_sort_order TEXT NOT NULL DEFAULT 'newest'
             CHECK (label_sort_order IN ('newest', 'oldest', 'alphabetical')),
@@ -92,6 +97,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           id,
           theme_preference,
           default_label_color,
+          no_label_color,
           default_label_id,
           label_sort_order,
           people_sort_order,
@@ -102,6 +108,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
         ) VALUES (
           1,
           'light',
+          'green',
           'green',
           NULL,
           'newest',
@@ -245,6 +252,17 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
           WHERE id = 1`,
         { $updatedAt: Date.now() },
       );
+    }
+
+    if (currentVersion > 0 && currentVersion < 8) {
+      await db.execAsync(`
+        ALTER TABLE app_settings
+          ADD COLUMN no_label_color TEXT NOT NULL DEFAULT 'green'
+          CHECK (no_label_color IN (
+            'green', 'blue', 'violet', 'pink', 'red',
+            'orange', 'amber', 'teal', 'gray'
+          ));
+      `);
     }
 
     await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

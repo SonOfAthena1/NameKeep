@@ -12,6 +12,7 @@ import {
 type SettingsRow = {
   theme_preference: ThemePreference;
   default_label_color: LabelColor;
+  no_label_color: LabelColor;
   default_label_id: string | null;
   label_sort_order: SortOrder;
   people_sort_order: SortOrder;
@@ -39,6 +40,7 @@ function mapSettings(row: SettingsRow): AppSettings {
   return {
     themePreference: row.theme_preference,
     defaultLabelColor: row.default_label_color,
+    noLabelColor: row.no_label_color,
     defaultLabelId: row.default_label_id,
     labelSortOrder: row.label_sort_order,
     peopleSortOrder: row.people_sort_order,
@@ -57,6 +59,7 @@ export async function getSettings(
     SELECT
       theme_preference,
       default_label_color,
+      no_label_color,
       default_label_id,
       label_sort_order,
       people_sort_order,
@@ -84,6 +87,7 @@ export async function saveSettings(
     `UPDATE app_settings
       SET theme_preference = $themePreference,
           default_label_color = $defaultLabelColor,
+          no_label_color = $noLabelColor,
           default_label_id = $defaultLabelId,
           label_sort_order = $labelSortOrder,
           people_sort_order = $peopleSortOrder,
@@ -95,6 +99,7 @@ export async function saveSettings(
     {
       $themePreference: settings.themePreference,
       $defaultLabelColor: settings.defaultLabelColor,
+      $noLabelColor: settings.noLabelColor,
       $defaultLabelId: settings.defaultLabelId,
       $labelSortOrder: settings.labelSortOrder,
       $peopleSortOrder: settings.peopleSortOrder,
@@ -129,6 +134,10 @@ export async function updateSettings(
   if (patch.defaultLabelColor !== undefined) {
     assignments.push('default_label_color = $defaultLabelColor');
     parameters.$defaultLabelColor = patch.defaultLabelColor;
+  }
+  if (patch.noLabelColor !== undefined) {
+    assignments.push('no_label_color = $noLabelColor');
+    parameters.$noLabelColor = patch.noLabelColor;
   }
   if (patch.defaultLabelId !== undefined) {
     assignments.push('default_label_id = $defaultLabelId');

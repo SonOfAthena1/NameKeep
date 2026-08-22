@@ -146,7 +146,7 @@ function formatShortDate(timestamp: number) {
 }
 
 type Editor = {
-  kind: 'person' | 'label';
+  kind: 'person' | 'label' | 'noLabel';
   id: string | null;
 } | null;
 
@@ -159,6 +159,7 @@ export default function HomeScreen() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [defaultLabelColor, setDefaultLabelColor] =
     useState<LabelColor>('green');
+  const [noLabelColor, setNoLabelColor] = useState<LabelColor>('green');
   const [defaultLabelId, setDefaultLabelId] = useState<string | null>(null);
   const [labelSortOrder, setLabelSortOrder] =
     useState<SortOrder>('newest');
@@ -181,6 +182,8 @@ export default function HomeScreen() {
   const [labelName, setLabelName] = useState('');
   const [labelColor, setLabelColor] = useState<LabelColor>('green');
   const [labelDeleteId, setLabelDeleteId] = useState<string | null>(null);
+  const [isNoLabelDeleteDialogOpen, setIsNoLabelDeleteDialogOpen] =
+    useState(false);
   const [deleteDestinationLabelId, setDeleteDestinationLabelId] = useState<
     string | null
   >(null);
@@ -246,6 +249,7 @@ export default function HomeScreen() {
         setPeople(loadedPeople);
         setTrash(loadedTrash);
         setDefaultLabelColor(settings.defaultLabelColor);
+        setNoLabelColor(settings.noLabelColor);
         setDefaultLabelId(
           loadedLabels.some((label) => label.id === settings.defaultLabelId)
             ? settings.defaultLabelId
@@ -338,7 +342,7 @@ export default function HomeScreen() {
         label: {
           id: 'no-label',
           name: 'No Label',
-          color: 'green',
+          color: noLabelColor,
           createdAt: Number.MIN_SAFE_INTEGER,
         },
         people: sortedUnlabeledPeople,
@@ -346,17 +350,22 @@ export default function HomeScreen() {
     }
 
     return labeledSections;
-  }, [labelSortOrder, labels, people, peopleSortOrder, search]);
+  }, [labelSortOrder, labels, noLabelColor, people, peopleSortOrder, search]);
 
   const selectedLabelName =
     labels.find((label) => label.id === personLabelId)?.name ?? 'No Label';
   const labelBeingDeleted = labels.find((label) => label.id === labelDeleteId);
+  const isDeletingNoLabel = isNoLabelDeleteDialogOpen;
   const deleteDestinationLabelName =
     labels.find((label) => label.id === deleteDestinationLabelId)?.name ??
-    'No Label';
+    (isDeletingNoLabel ? 'Choose a label' : 'No Label');
   const peopleInDeletedLabel = people.filter(
     (person) => person.labelId === labelDeleteId,
   ).length;
+  const peopleWithoutLabel = people.filter((person) => person.labelId === null);
+  const peopleInDeleteDialog = isDeletingNoLabel
+    ? peopleWithoutLabel.length
+    : peopleInDeletedLabel;
   const areAllVisibleSectionsCollapsed =
     sections.length > 0 &&
     sections.every(({ label }) => collapsedLabelIds.has(label.id));
@@ -545,6 +554,13 @@ export default function HomeScreen() {
     setEditor({ kind: 'label', id: label.id });
   }
 
+  /** Opens the editor for the virtual No Label section. */
+  function openNoLabelEditor() {
+    setIsAddMenuOpen(false);
+    setLabelColor(noLabelColor);
+    setEditor({ kind: 'noLabel', id: null });
+  }
+
   /** Closes the editor and clears its temporary choices. */
   function closeEditor() {
     setEditor(null);
@@ -707,13 +723,16 @@ export default function HomeScreen() {
     if (isEditorSaving) return;
 
     const trimmedName = labelName.trim();
-    if (!trimmedName) {
+    if (editor?.kind === 'label' && !trimmedName) {
       return;
     }
 
     setIsEditorSaving(true);
     try {
-      if (editor?.kind === 'label' && editor.id) {
+      if (editor?.kind === 'noLabel') {
+        await updateSettings(db, { noLabelColor: labelColor });
+        setNoLabelColor(labelColor);
+      } else if (editor?.kind === 'label' && editor.id) {
         const labelId = editor.id;
         const updated = await updateLabelRecord(db, labelId, {
           name: trimmedName,
@@ -748,6 +767,14 @@ export default function HomeScreen() {
 
   /** Opens the right delete confirmation for the item being edited. */
   function deleteEditedItem() {
+    if (editor?.kind === 'noLabel') {
+      setIsNoLabelDeleteDialogOpen(true);
+      setDeleteDestinationLabelId(null);
+      setIsDeleteDestinationPickerOpen(false);
+      closeEditor();
+      return;
+    }
+
     if (!editor?.id) {
       return;
     }
@@ -809,6 +836,7 @@ export default function HomeScreen() {
   /** Closes the label deletion dialog and clears its temporary choices. */
   function closeLabelDeleteDialog() {
     setLabelDeleteId(null);
+    setIsNoLabelDeleteDialogOpen(false);
     setDeleteDestinationLabelId(null);
     setIsDeleteDestinationPickerOpen(false);
   }
@@ -816,6 +844,12 @@ export default function HomeScreen() {
   /** Stops label deletion unless the delete request is already running. */
   function cancelLabelDeletion() {
     if (isLabelDeleting) return;
+
+    if (isNoLabelDeleteDialogOpen) {
+      closeLabelDeleteDialog();
+      openNoLabelEditor();
+      return;
+    }
 
     const label = labels.find((candidate) => candidate.id === labelDeleteId);
     closeLabelDeleteDialog();
@@ -882,6 +916,64 @@ export default function HomeScreen() {
       closeLabelDeleteDialog();
     } catch (error) {
       showMutationError('delete this label', error);
+    } finally {
+      setIsLabelDeleting(false);
+    }
+  }
+
+  /** Clears the current No Label section by moving its people or sending them to Trash. */
+  async function confirmNoLabelDeletion(movePeopleToTrash: boolean) {
+    if (isLabelDeleting || (!movePeopleToTrash && !deleteDestinationLabelId)) {
+      return;
+    }
+
+    const peopleToHandle = people.filter((person) => person.labelId === null);
+    const deletedAt = Date.now();
+
+    setIsLabelDeleting(true);
+    try {
+      await withWriteTransaction(db, async (transaction) => {
+        for (const person of peopleToHandle) {
+          if (movePeopleToTrash) {
+            const moved = await movePersonToTrash(transaction, person.id, deletedAt);
+            if (!moved) throw new Error(`Person ${person.id} was not found.`);
+          } else {
+            const updated = await updatePersonRecord(transaction, person.id, {
+              name: person.name,
+              description: person.description,
+              labelId: deleteDestinationLabelId,
+            });
+            if (!updated) throw new Error(`Person ${person.id} was not found.`);
+          }
+        }
+      });
+
+      if (movePeopleToTrash && peopleToHandle.length > 0) {
+        await cancelMemoryRemindersForPeople(peopleToHandle.map((person) => person.id));
+        setTrash((currentTrash) => [
+          ...peopleToHandle.map((person) => ({ ...person, deletedAt })),
+          ...currentTrash,
+        ]);
+      }
+
+      const handledIds = new Set(peopleToHandle.map((person) => person.id));
+      setPeople((current) =>
+        movePeopleToTrash
+          ? current.filter((person) => !handledIds.has(person.id))
+          : current.map((person) =>
+              handledIds.has(person.id)
+                ? { ...person, labelId: deleteDestinationLabelId }
+                : person,
+            ),
+      );
+      setCollapsedLabelIds((current) => {
+        const next = new Set(current);
+        next.delete('no-label');
+        return next;
+      });
+      closeLabelDeleteDialog();
+    } catch (error) {
+      showMutationError('clear the No Label section', error);
     } finally {
       setIsLabelDeleting(false);
     }
@@ -1209,7 +1301,6 @@ export default function HomeScreen() {
                     style={({ pressed }) => [
                       styles.sectionToggle,
                       condensedView && styles.sectionToggleCondensed,
-                      label.id === 'no-label' && styles.sectionToggleWithoutEdit,
                       {
                         backgroundColor: pressed ? labelTheme.pressed : labelTheme.base,
                       },
@@ -1247,23 +1338,25 @@ export default function HomeScreen() {
                       </Text>
                     </View>
                   </Pressable>
-                  {label.id !== 'no-label' && (
-                    <Pressable
-                      accessibilityLabel={`Edit ${label.name} label`}
-                      accessibilityRole="button"
-                      hitSlop={10}
-                      onPress={() => openLabelEditor(label)}
-                      style={({ pressed }) => [
-                        styles.labelEditButton,
-                        pressed && styles.editButtonPressed,
-                      ]}>
-                      <SymbolView
-                        name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
-                        size={18}
-                        tintColor={labelTheme.foreground}
-                      />
-                    </Pressable>
-                  )}
+                  <Pressable
+                    accessibilityLabel={`Edit ${label.name} label`}
+                    accessibilityRole="button"
+                    hitSlop={10}
+                    onPress={() =>
+                      label.id === 'no-label'
+                        ? openNoLabelEditor()
+                        : openLabelEditor(label)
+                    }
+                    style={({ pressed }) => [
+                      styles.labelEditButton,
+                      pressed && styles.editButtonPressed,
+                    ]}>
+                    <SymbolView
+                      name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                      size={18}
+                      tintColor={labelTheme.foreground}
+                    />
+                  </Pressable>
                 </View>
 
                 {!isCollapsed && people.length > 0 && (
@@ -1442,11 +1535,15 @@ export default function HomeScreen() {
               <View style={styles.modalHeader}>
                 <View>
                   <Text style={styles.modalEyebrow}>
-                    {editor?.id ? 'EDIT IN NAMEKEEP' : 'ADD TO NAMEKEEP'}
+                    {editor?.id || editor?.kind === 'noLabel'
+                      ? 'EDIT IN NAMEKEEP'
+                      : 'ADD TO NAMEKEEP'}
                   </Text>
                   <Text style={styles.modalTitle}>
                     {editor?.kind === 'person'
                       ? editor.id ? 'Edit Person' : 'New Person'
+                      : editor?.kind === 'noLabel'
+                      ? 'Edit No Label'
                       : editor?.id ? 'Edit Label' : 'New Label'}
                   </Text>
                 </View>
@@ -1586,25 +1683,33 @@ export default function HomeScreen() {
                 </>
               ) : (
                 <View style={styles.fieldGroup}>
-                  <View style={styles.fieldLabelRow}>
-                    <Text style={styles.fieldLabel}>Label name</Text>
-                    <Text style={styles.characterCount}>
-                      {labelName.length}/{LABEL_MAX_LENGTH}
+                  {editor?.kind === 'noLabel' ? (
+                    <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>
+                      No Label
                     </Text>
-                  </View>
-                  <TextInput
-                    autoCapitalize="words"
-                    autoFocus
-                    maxLength={LABEL_MAX_LENGTH}
-                    onChangeText={setLabelName}
-                    onSubmitEditing={saveLabel}
-                    placeholder="For example, Work or Biology"
-                    placeholderTextColor={theme.textFaint}
-                    returnKeyType="done"
-                    selectionColor={theme.accent}
-                    style={styles.fieldInput}
-                    value={labelName}
-                  />
+                  ) : (
+                    <>
+                      <View style={styles.fieldLabelRow}>
+                        <Text style={styles.fieldLabel}>Label name</Text>
+                        <Text style={styles.characterCount}>
+                          {labelName.length}/{LABEL_MAX_LENGTH}
+                        </Text>
+                      </View>
+                      <TextInput
+                        autoCapitalize="words"
+                        autoFocus
+                        maxLength={LABEL_MAX_LENGTH}
+                        onChangeText={setLabelName}
+                        onSubmitEditing={saveLabel}
+                        placeholder="For example, Work or Biology"
+                        placeholderTextColor={theme.textFaint}
+                        returnKeyType="done"
+                        selectionColor={theme.accent}
+                        style={styles.fieldInput}
+                        value={labelName}
+                      />
+                    </>
+                  )}
                   <Text style={[styles.fieldLabel, styles.colorFieldLabel]}>Color</Text>
                   <View style={styles.colorOptions}>
                     {LABEL_COLOR_OPTIONS.map((option) => {
@@ -1646,9 +1751,10 @@ export default function HomeScreen() {
               <View
                 style={[
                   styles.modalActions,
-                  !!editor?.id && styles.editorModalActions,
+                  (editor?.id || editor?.kind === 'noLabel') &&
+                    styles.editorModalActions,
                 ]}>
-                {!!editor?.id && (
+                {(!!editor?.id || editor?.kind === 'noLabel') && (
                   <Pressable
                     accessibilityRole="button"
                     disabled={isEditorSaving}
@@ -1686,7 +1792,8 @@ export default function HomeScreen() {
                   onPress={editor?.kind === 'person' ? savePerson : saveLabel}
                   style={({ pressed }) => [
                     styles.saveButton,
-                    !!editor?.id && styles.editorSaveButton,
+                    (editor?.id || editor?.kind === 'noLabel') &&
+                      styles.editorSaveButton,
                     (isEditorSaving ||
                       (editor?.kind === 'label' && !labelName.trim())) &&
                       styles.saveButtonDisabled,
@@ -1697,7 +1804,11 @@ export default function HomeScreen() {
                       ? 'Saving…'
                       : editor?.id
                       ? 'Save'
-                      : editor?.kind === 'person' ? 'Add Person' : 'Add Label'}
+                      : editor?.kind === 'person'
+                      ? 'Add Person'
+                      : editor?.kind === 'noLabel'
+                      ? 'Save'
+                      : 'Add Label'}
                   </Text>
                 </Pressable>
               </View>
@@ -1711,7 +1822,7 @@ export default function HomeScreen() {
         onRequestClose={cancelLabelDeletion}
         presentationStyle="overFullScreen"
         transparent
-        visible={labelDeleteId !== null}>
+        visible={labelDeleteId !== null || isNoLabelDeleteDialogOpen}>
         <Pressable
           accessibilityLabel="Close delete label dialog"
           onPress={cancelLabelDeletion}
@@ -1722,9 +1833,13 @@ export default function HomeScreen() {
             style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={styles.modalHeaderCopy}>
-                <Text style={styles.deleteModalEyebrow}>DELETE LABEL</Text>
+                <Text style={styles.deleteModalEyebrow}>
+                  {isDeletingNoLabel ? 'CLEAR NO LABEL' : 'DELETE LABEL'}
+                </Text>
                 <Text style={styles.modalTitle}>
-                  Delete “{labelBeingDeleted?.name ?? 'label'}”?
+                  {isDeletingNoLabel
+                    ? 'Clear “No Label”?'
+                    : `Delete “${labelBeingDeleted?.name ?? 'label'}”?`}
                 </Text>
               </View>
               <Pressable
@@ -1747,9 +1862,13 @@ export default function HomeScreen() {
             </View>
 
             <Text style={styles.deleteModalDescription}>
-              This label contains {peopleInDeletedLabel}{' '}
-              {peopleInDeletedLabel === 1 ? 'person' : 'people'}. Choose whether to
-              move them or delete them with the label.
+              {isDeletingNoLabel
+                ? `This section contains ${peopleInDeleteDialog} ${
+                    peopleInDeleteDialog === 1 ? 'person' : 'people'
+                  }. Move them to a label or send them to Trash. The section returns whenever someone has no label.`
+                : `This label contains ${peopleInDeleteDialog} ${
+                    peopleInDeleteDialog === 1 ? 'person' : 'people'
+                  }. Choose whether to move them or delete them with the label.`}
             </Text>
 
             <View style={styles.fieldGroup}>
@@ -1795,26 +1914,28 @@ export default function HomeScreen() {
                   nestedScrollEnabled
                   showsVerticalScrollIndicator={false}
                   style={styles.labelOptions}>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setDeleteDestinationLabelId(null);
-                      setIsDeleteDestinationPickerOpen(false);
-                    }}
-                    style={({ pressed }) => [
-                      styles.labelOption,
-                      deleteDestinationLabelId === null && styles.labelOptionSelected,
-                      pressed && styles.labelOptionPressed,
-                    ]}>
-                    <Text style={styles.labelOptionText}>No Label</Text>
-                    {deleteDestinationLabelId === null && (
-                      <SymbolView
-                        name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                        size={17}
-                        tintColor={theme.accent}
-                      />
-                    )}
-                  </Pressable>
+                  {!isDeletingNoLabel && (
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => {
+                        setDeleteDestinationLabelId(null);
+                        setIsDeleteDestinationPickerOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.labelOption,
+                        deleteDestinationLabelId === null && styles.labelOptionSelected,
+                        pressed && styles.labelOptionPressed,
+                      ]}>
+                      <Text style={styles.labelOptionText}>No Label</Text>
+                      {deleteDestinationLabelId === null && (
+                        <SymbolView
+                          name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                          size={17}
+                          tintColor={theme.accent}
+                        />
+                      )}
+                    </Pressable>
+                  )}
                   {labels
                     .filter((label) => label.id !== labelDeleteId)
                     .map((label) => (
@@ -1848,9 +1969,20 @@ export default function HomeScreen() {
             <View style={styles.deleteDecisionActions}>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: isLabelDeleting }}
-                disabled={isLabelDeleting}
-                onPress={() => confirmLabelDeletion(false)}
+                accessibilityState={{
+                  disabled:
+                    isLabelDeleting ||
+                    (isDeletingNoLabel && deleteDestinationLabelId === null),
+                }}
+                disabled={
+                  isLabelDeleting ||
+                  (isDeletingNoLabel && deleteDestinationLabelId === null)
+                }
+                onPress={() =>
+                  void (isDeletingNoLabel
+                    ? confirmNoLabelDeletion(false)
+                    : confirmLabelDeletion(false))
+                }
                 style={({ pressed }) => [
                   styles.moveAndDeleteButton,
                   pressed && styles.moveAndDeleteButtonPressed,
@@ -1859,8 +1991,12 @@ export default function HomeScreen() {
                 <Text style={styles.moveAndDeleteButtonText}>
                   {isLabelDeleting
                     ? 'Deleting…'
-                    : `Move ${peopleInDeletedLabel} ${
-                        peopleInDeletedLabel === 1 ? 'person' : 'people'
+                    : isDeletingNoLabel
+                    ? `Move ${peopleInDeleteDialog} ${
+                        peopleInDeleteDialog === 1 ? 'person' : 'people'
+                      }`
+                    : `Move ${peopleInDeleteDialog} ${
+                        peopleInDeleteDialog === 1 ? 'person' : 'people'
                       } & Delete Label`}
                 </Text>
               </Pressable>
@@ -1868,7 +2004,11 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityState={{ disabled: isLabelDeleting }}
                 disabled={isLabelDeleting}
-                onPress={() => confirmLabelDeletion(true)}
+                onPress={() =>
+                  void (isDeletingNoLabel
+                    ? confirmNoLabelDeletion(true)
+                    : confirmLabelDeletion(true))
+                }
                 style={({ pressed }) => [
                   styles.deleteAllButton,
                   pressed && styles.deleteAllButtonPressed,
@@ -1877,8 +2017,12 @@ export default function HomeScreen() {
                 <Text style={styles.deleteAllButtonText}>
                   {isLabelDeleting
                     ? 'Deleting…'
-                    : `Delete Label & Move ${peopleInDeletedLabel} ${
-                        peopleInDeletedLabel === 1 ? 'Person' : 'People'
+                    : isDeletingNoLabel
+                    ? `Move ${peopleInDeleteDialog} ${
+                        peopleInDeleteDialog === 1 ? 'Person' : 'People'
+                      } to Trash`
+                    : `Delete Label & Move ${peopleInDeleteDialog} ${
+                        peopleInDeleteDialog === 1 ? 'Person' : 'People'
                       } to Trash`}
                 </Text>
               </Pressable>
@@ -2268,9 +2412,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sectionToggleCondensed: {
     minHeight: 41,
-  },
-  sectionToggleWithoutEdit: {
-    paddingRight: 15,
   },
   chevronBox: {
     width: 25,

@@ -39,6 +39,7 @@ export type StoredTrashedPerson = Omit<StoredPerson, 'deletedAt'> & {
 export type AppSettings = {
   themePreference: ThemePreference;
   defaultLabelColor: LabelColor;
+  noLabelColor: LabelColor;
   defaultLabelId: string | null;
   labelSortOrder: SortOrder;
   peopleSortOrder: SortOrder;
