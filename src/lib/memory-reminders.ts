@@ -63,14 +63,6 @@ export async function scheduleMemoryReminders(
     return;
   }
 
-  if (isUnnamedPersonName(person.name)) {
-    console.log(
-      'Memory reminders not scheduled: this person has an unnamed placeholder.',
-      { personId: person.id, name: person.name },
-    );
-    return;
-  }
-
   await Promise.all(
     intervals.map((interval) =>
       Notifications.scheduleNotificationAsync({
@@ -86,10 +78,6 @@ export async function scheduleMemoryReminders(
       }),
     ),
   );
-  console.log('Memory reminders scheduled.', {
-    personId: person.id,
-    intervals,
-  });
 }
 
 /** Cancels every scheduled memory reminder for the given people. */
