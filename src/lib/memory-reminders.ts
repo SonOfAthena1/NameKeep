@@ -6,6 +6,7 @@ import { isUnnamedPersonName } from '@/lib/names';
 
 const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
 const MEMORY_REMINDER_KIND = 'memory-reminder';
+const MEMORY_REMINDER_CHANNEL_ID = 'memory-reminders';
 
 type MemoryReminderData = {
   kind: typeof MEMORY_REMINDER_KIND;
@@ -25,6 +26,20 @@ function isMemoryReminderData(value: unknown): value is MemoryReminderData {
 /** Checks whether this device can schedule notifications. */
 function notificationsAreAvailable() {
   return Platform.OS !== 'web';
+}
+
+/** Creates the Android channel before permission is requested or reminders are scheduled. */
+async function ensureMemoryReminderChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+
+  await Notifications.setNotificationChannelAsync(
+    MEMORY_REMINDER_CHANNEL_ID,
+    {
+      name: 'Memory reminders',
+      description: 'Reminders that help you practice remembering people’s names.',
+      importance: Notifications.AndroidImportance.DEFAULT,
+    },
+  );
 }
 
 /** Creates a quiz prompt without revealing a placeholder name as though it were real. */
@@ -47,6 +62,8 @@ function getReminderBody(person: Person) {
 export async function requestMemoryReminderPermission(): Promise<boolean> {
   if (!notificationsAreAvailable()) return false;
 
+  await ensureMemoryReminderChannel();
+
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) return true;
 
@@ -63,6 +80,8 @@ export async function scheduleMemoryReminders(
     return;
   }
 
+  await ensureMemoryReminderChannel();
+
   await Promise.all(
     intervals.map((interval) =>
       Notifications.scheduleNotificationAsync({
@@ -74,6 +93,10 @@ export async function scheduleMemoryReminders(
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(person.createdAt + interval * DAY_IN_MILLISECONDS),
+          channelId:
+            Platform.OS === 'android'
+              ? MEMORY_REMINDER_CHANNEL_ID
+              : undefined,
         },
       }),
     ),
