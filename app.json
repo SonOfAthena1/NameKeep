@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "namekeep",
+    "name": "NameKeep",
     "slug": "namekeep",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,7 +8,8 @@
     "scheme": "namekeep",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/images/icon.png"
+      "icon": "./assets/images/icon.png",
+      "bundleIdentifier": "org.lwcuellar.namekeep"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +19,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.namekeep"
+      "package": "org.lwcuellar.namekeep"
     },
     "web": {
       "output": "static",
