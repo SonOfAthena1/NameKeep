@@ -23,6 +23,27 @@ In the output, you'll find options to open the app in a
 - [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
 - [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
+## Testing
+
+Run the complete automated check after making changes:
+
+```bash
+npm run verify
+```
+
+Useful focused commands:
+
+```bash
+npm test                 # Run the test suite once
+npm run test:watch       # Re-run affected tests while editing
+npm run test:coverage    # Run tests and enforce coverage thresholds
+npm run typecheck        # Check TypeScript without running tests
+```
+
+The suite covers CSV import/export edge cases, memory-reminder behavior, name
+helpers, and SQLite migrations, repositories, settings, and transactions. It
+uses an in-memory database and never touches app or device data.
+
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
 ## Get a fresh project
