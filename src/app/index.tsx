@@ -7,6 +7,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -352,6 +353,7 @@ export default function HomeScreen() {
     return labeledSections;
   }, [labelSortOrder, labels, noLabelColor, people, peopleSortOrder, search]);
 
+  const newestLabels = useMemo(() => sortByOrder(labels, 'newest'), [labels]);
   const selectedLabelName =
     labels.find((label) => label.id === personLabelId)?.name ?? 'No Label';
   const labelBeingDeleted = labels.find((label) => label.id === labelDeleteId);
@@ -1531,21 +1533,56 @@ export default function HomeScreen() {
             <Pressable
               accessibilityRole="none"
               onPress={(event) => event.stopPropagation()}
-              style={styles.modalCard}>
+              style={[
+                styles.modalCard,
+                editor?.kind === 'person' &&
+                  isLabelPickerOpen &&
+                  styles.labelPickerModalCard,
+              ]}>
               <View style={styles.modalHeader}>
-                <View>
-                  <Text style={styles.modalEyebrow}>
-                    {editor?.id || editor?.kind === 'noLabel'
-                      ? 'EDIT IN NAMEKEEP'
-                      : 'ADD TO NAMEKEEP'}
-                  </Text>
-                  <Text style={styles.modalTitle}>
-                    {editor?.kind === 'person'
-                      ? editor.id ? 'Edit Person' : 'New Person'
-                      : editor?.kind === 'noLabel'
-                      ? 'Edit No Label'
-                      : editor?.id ? 'Edit Label' : 'New Label'}
-                  </Text>
+                <View style={styles.modalHeaderCopy}>
+                  {editor?.kind === 'person' && isLabelPickerOpen ? (
+                    <View style={styles.labelPickerHeading}>
+                      <Pressable
+                        accessibilityLabel="Back to person details"
+                        accessibilityRole="button"
+                        hitSlop={10}
+                        onPress={() => setIsLabelPickerOpen(false)}
+                        style={({ pressed }) => [
+                          styles.modalBackButton,
+                          pressed && styles.modalCloseButtonPressed,
+                        ]}>
+                        <SymbolView
+                          name={{
+                            ios: 'chevron.left',
+                            android: 'arrow_back',
+                            web: 'arrow_back',
+                          }}
+                          size={19}
+                          tintColor={theme.textMuted}
+                        />
+                      </Pressable>
+                      <View style={styles.labelPickerHeadingCopy}>
+                        <Text style={styles.modalEyebrow}>SELECT FOR PERSON</Text>
+                        <Text style={styles.modalTitle}>Choose a Label</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.modalEyebrow}>
+                        {editor?.id || editor?.kind === 'noLabel'
+                          ? 'EDIT IN NAMEKEEP'
+                          : 'ADD TO NAMEKEEP'}
+                      </Text>
+                      <Text style={styles.modalTitle}>
+                        {editor?.kind === 'person'
+                          ? editor.id ? 'Edit Person' : 'New Person'
+                          : editor?.kind === 'noLabel'
+                          ? 'Edit No Label'
+                          : editor?.id ? 'Edit Label' : 'New Label'}
+                      </Text>
+                    </>
+                  )}
                 </View>
                 <Pressable
                   accessibilityLabel="Close dialog"
@@ -1564,7 +1601,65 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              {editor?.kind === 'person' ? (
+              {editor?.kind === 'person' && isLabelPickerOpen ? (
+                <View style={styles.labelPickerContent}>
+                  <Text style={styles.labelPickerDescription}>
+                    Recently created labels appear first.
+                  </Text>
+                  <ScrollView
+                    contentContainerStyle={styles.labelPickerListContent}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator
+                    style={styles.labelPickerList}>
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: personLabelId === null }}
+                      onPress={() => {
+                        setPersonLabelId(null);
+                        setIsLabelPickerOpen(false);
+                      }}
+                      style={({ pressed }) => [
+                        styles.labelOption,
+                        personLabelId === null && styles.labelOptionSelected,
+                        pressed && styles.labelOptionPressed,
+                      ]}>
+                      <Text style={styles.labelOptionText}>No Label</Text>
+                      {personLabelId === null && (
+                        <SymbolView
+                          name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                          size={17}
+                          tintColor={theme.accent}
+                        />
+                      )}
+                    </Pressable>
+                    <View style={styles.labelPickerDivider} />
+                    {newestLabels.map((label) => (
+                      <Pressable
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: personLabelId === label.id }}
+                        key={label.id}
+                        onPress={() => {
+                          setPersonLabelId(label.id);
+                          setIsLabelPickerOpen(false);
+                        }}
+                        style={({ pressed }) => [
+                          styles.labelOption,
+                          personLabelId === label.id && styles.labelOptionSelected,
+                          pressed && styles.labelOptionPressed,
+                        ]}>
+                        <Text style={styles.labelOptionText}>{label.name}</Text>
+                        {personLabelId === label.id && (
+                          <SymbolView
+                            name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                            size={17}
+                            tintColor={theme.accent}
+                          />
+                        )}
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : editor?.kind === 'person' ? (
                 <>
                   <View style={styles.fieldGroup}>
                     <View style={styles.fieldLabelRow}>
@@ -1610,8 +1705,11 @@ export default function HomeScreen() {
                     <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>Label</Text>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityState={{ expanded: isLabelPickerOpen }}
-                      onPress={() => setIsLabelPickerOpen((current) => !current)}
+                      accessibilityState={{ expanded: false }}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setIsLabelPickerOpen(true);
+                      }}
                       style={({ pressed }) => [
                         styles.labelSelect,
                         pressed && styles.labelSelectPressed,
@@ -1625,60 +1723,8 @@ export default function HomeScreen() {
                         }}
                         size={18}
                         tintColor={theme.textMuted}
-                        style={{
-                          transform: [{ rotate: isLabelPickerOpen ? '180deg' : '0deg' }],
-                        }}
                       />
                     </Pressable>
-                    {isLabelPickerOpen && (
-                      <ScrollView
-                        keyboardShouldPersistTaps="handled"
-                        nestedScrollEnabled
-                        showsVerticalScrollIndicator={false}
-                        style={styles.labelOptions}>
-                        <Pressable
-                          onPress={() => {
-                            setPersonLabelId(null);
-                            setIsLabelPickerOpen(false);
-                          }}
-                          style={({ pressed }) => [
-                            styles.labelOption,
-                            personLabelId === null && styles.labelOptionSelected,
-                            pressed && styles.labelOptionPressed,
-                          ]}>
-                          <Text style={styles.labelOptionText}>No Label</Text>
-                          {personLabelId === null && (
-                            <SymbolView
-                              name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                              size={17}
-                              tintColor={theme.accent}
-                            />
-                          )}
-                        </Pressable>
-                        {labels.map((label) => (
-                          <Pressable
-                            key={label.id}
-                            onPress={() => {
-                              setPersonLabelId(label.id);
-                              setIsLabelPickerOpen(false);
-                            }}
-                            style={({ pressed }) => [
-                              styles.labelOption,
-                              personLabelId === label.id && styles.labelOptionSelected,
-                              pressed && styles.labelOptionPressed,
-                            ]}>
-                            <Text style={styles.labelOptionText}>{label.name}</Text>
-                            {personLabelId === label.id && (
-                              <SymbolView
-                                name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                                size={17}
-                                tintColor={theme.accent}
-                              />
-                            )}
-                          </Pressable>
-                        ))}
-                      </ScrollView>
-                    )}
                   </View>
                 </>
               ) : (
@@ -1748,12 +1794,13 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              <View
-                style={[
-                  styles.modalActions,
-                  (editor?.id || editor?.kind === 'noLabel') &&
-                    styles.editorModalActions,
-                ]}>
+              {!isLabelPickerOpen && (
+                <View
+                  style={[
+                    styles.modalActions,
+                    (editor?.id || editor?.kind === 'noLabel') &&
+                      styles.editorModalActions,
+                  ]}>
                 {(!!editor?.id || editor?.kind === 'noLabel') && (
                   <Pressable
                     accessibilityRole="button"
@@ -1811,7 +1858,8 @@ export default function HomeScreen() {
                       : 'Add Label'}
                   </Text>
                 </Pressable>
-              </View>
+                </View>
+              )}
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
@@ -2712,6 +2760,9 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     shadowRadius: 28,
     elevation: 16,
   },
+  labelPickerModalCard: {
+    height: '86%',
+  },
   bulkMoveDialog: {
     width: '100%',
     maxWidth: 480,
@@ -2743,6 +2794,23 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flex: 1,
     minWidth: 0,
     paddingRight: 16,
+  },
+  labelPickerHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  labelPickerHeadingCopy: {
+    flex: 1,
+    minWidth: 0,
+    marginLeft: 12,
+  },
+  modalBackButton: {
+    width: 34,
+    height: 34,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    backgroundColor: theme.backgroundElement,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modalEyebrow: {
     color: theme.accent,
@@ -2879,6 +2947,34 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     borderColor: theme.border,
     backgroundColor: theme.surface,
     overflow: 'hidden',
+  },
+  labelPickerContent: {
+    flex: 1,
+    minHeight: 0,
+  },
+  labelPickerDescription: {
+    color: theme.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+  labelPickerList: {
+    flex: 1,
+    minHeight: 0,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+    overflow: 'hidden',
+  },
+  labelPickerListContent: {
+    paddingBottom: 4,
+  },
+  labelPickerDivider: {
+    height: 8,
+    backgroundColor: theme.backgroundElement,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.borderSoft,
   },
   labelOption: {
     minHeight: 42,
