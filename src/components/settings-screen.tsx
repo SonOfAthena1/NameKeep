@@ -3,9 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  BackHandler,
   Modal,
   Platform,
   Pressable,
@@ -137,6 +138,20 @@ export function SettingsScreen({
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isImportGuideOpen, setIsImportGuideOpen] = useState(false);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (showTrash) {
+        setShowTrash(false);
+      } else {
+        onBack();
+      }
+
+      return true;
+    });
+
+    return () => subscription.remove();
+  }, [onBack, showTrash]);
 
   const defaultLabelName =
     labels.find((label) => label.id === defaultLabelId)?.name ?? 'None';
