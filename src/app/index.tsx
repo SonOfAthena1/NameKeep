@@ -1,7 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
 import { SymbolView } from 'expo-symbols';
-import * as Notifications from 'expo-notifications';
-import { type Href, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -66,7 +64,6 @@ import {
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
 import {
   cancelMemoryRemindersForPeople,
-  getMemoryReminderPersonId,
   requestMemoryReminderPermission,
   scheduleMemoryReminders,
 } from '@/lib/memory-reminders';
@@ -202,7 +199,6 @@ export default function HomeScreen() {
   const [isBulkLabelPickerOpen, setIsBulkLabelPickerOpen] = useState(false);
   const [isBulkActionSaving, setIsBulkActionSaving] = useState(false);
   const db = useSQLiteContext();
-  const router = useRouter();
   const theme = useTheme();
   const { colorScheme, themePreference, setThemePreference } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -289,23 +285,6 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [databaseLoadAttempt, db, setThemePreference]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-
-    const subscription = Notifications.addNotificationResponseReceivedListener(
-      (response) => {
-        const personId = getMemoryReminderPersonId(response);
-        if (personId) {
-          router.push({
-            pathname: '/remember/[personId]',
-            params: { personId },
-          } as unknown as Href);
-        }
-      },
-    );
-    return () => subscription.remove();
-  }, [router]);
 
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
