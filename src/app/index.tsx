@@ -1603,9 +1603,6 @@ export default function HomeScreen() {
 
               {editor?.kind === 'person' && isLabelPickerOpen ? (
                 <View style={styles.labelPickerContent}>
-                  <Text style={styles.labelPickerDescription}>
-                    Recently created labels appear first.
-                  </Text>
                   <ScrollView
                     contentContainerStyle={styles.labelPickerListContent}
                     keyboardShouldPersistTaps="handled"
@@ -2951,12 +2948,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   labelPickerContent: {
     flex: 1,
     minHeight: 0,
-  },
-  labelPickerDescription: {
-    color: theme.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 10,
   },
   labelPickerList: {
     flex: 1,
