@@ -26,6 +26,7 @@ export type ValidatedCsvPerson = {
   description: string;
   labelName: string;
   labelColor: LabelColor | null;
+  metDate: number | null;
   rowNumber: number;
 };
 
@@ -66,6 +67,28 @@ function normalizeForComparison(value: string): string {
 /** Checks whether a value is one of the label colors this app supports. */
 function isLabelColor(value: string): value is LabelColor {
   return VALID_COLORS.has(value as LabelColor);
+}
+
+/** Parses a YYYY-MM-DD value as local midnight, rejecting impossible dates. */
+function parseMetDate(value: string): number | null | undefined {
+  if (!value) return null;
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+
+  return date.getTime();
 }
 
 /** Creates a temporary unique ID for an imported label or person. */
@@ -124,6 +147,7 @@ export function parsePeopleCsv(contents: string): ParsedPeopleCsv {
     const description = normalizeText(row.description);
     const labelName = normalizeText(row.label);
     const colorValue = normalizeText(row.label_color).toLocaleLowerCase();
+    const metDate = parseMetDate(normalizeText(row.met_date));
 
     const hasInvalidText = [name, description, labelName].some((value) =>
       CONTROL_CHARACTERS.test(value),
@@ -134,6 +158,7 @@ export function parsePeopleCsv(contents: string): ParsedPeopleCsv {
       description.length > DESCRIPTION_MAX_LENGTH ||
       labelName.length > LABEL_MAX_LENGTH ||
       hasInvalidText ||
+      metDate === undefined ||
       (!labelName && !!colorValue) ||
       (!!colorValue && !isLabelColor(colorValue));
 
@@ -147,6 +172,7 @@ export function parsePeopleCsv(contents: string): ParsedPeopleCsv {
       description,
       labelName,
       labelColor: colorValue && isLabelColor(colorValue) ? colorValue : null,
+      metDate,
       rowNumber,
     });
   });
@@ -233,7 +259,7 @@ export function createPeopleImportPlan(
       name: row.name,
       description: row.description,
       labelId: label?.id ?? null,
-      createdAt,
+      createdAt: row.metDate ?? createdAt,
     });
   }
 

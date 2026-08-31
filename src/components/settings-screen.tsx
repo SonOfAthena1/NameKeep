@@ -573,7 +573,7 @@ export function SettingsScreen({
                 showsHorizontalScrollIndicator={false}
                 style={styles.csvExample}>
                 <Text selectable style={styles.csvExampleText}>
-                  {'name,description,label,label_color\nMaya Chen,Frontend developer,Work,green\nJordan Lee,,Friends,blue'}
+                  {'name,description,label,label_color,met_date\nMaya Chen,Frontend developer,Work,green,2026-08-14\nJordan Lee,,Friends,blue,'}
                 </Text>
               </ScrollView>
 
@@ -581,7 +581,8 @@ export function SettingsScreen({
               <View style={styles.importRules}>
                 <Text style={styles.importRule}>• The file must end in .csv and be no larger than 2 MB.</Text>
                 <Text style={styles.importRule}>• The first row must contain a name column.</Text>
-                <Text style={styles.importRule}>• Description, label, and label_color are optional.</Text>
+                <Text style={styles.importRule}>• Description, label, label_color, and met_date are optional.</Text>
+                <Text style={styles.importRule}>• Met dates must use YYYY-MM-DD (for example, 2026-08-14).</Text>
                 <Text style={styles.importRule}>• Valid colors: green, blue, violet, pink, red, orange, amber, teal, and gray.</Text>
                 <Text style={styles.importRule}>• Put values containing commas inside double quotes.</Text>
                 <Text style={styles.importRule}>• Existing labels are reused and exact duplicate people are skipped.</Text>

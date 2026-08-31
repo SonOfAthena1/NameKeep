@@ -18,7 +18,7 @@ const person = (overrides: Partial<Person> = {}): Person => ({
   name: 'Ada Lovelace',
   description: 'Met at a conference',
   labelId: label.id,
-  createdAt: 2,
+  createdAt: new Date(2026, 7, 14, 15, 30).getTime(),
   ...overrides,
 });
 
@@ -38,6 +38,7 @@ describe('CSV export', () => {
           description: original.description,
           labelName: label.name,
           labelColor: label.color,
+          metDate: new Date(2026, 7, 14).getTime(),
           rowNumber: 2,
         },
       ],
@@ -56,7 +57,7 @@ describe('CSV export', () => {
 
   test('exports a missing label as empty cells', () => {
     expect(createPeopleCsv([person({ labelId: 'missing' })], [])).toContain(
-      '"Ada Lovelace","Met at a conference","",""',
+      '"Ada Lovelace","Met at a conference","","","2026-08-14"',
     );
   });
 });
@@ -80,6 +81,7 @@ describe('CSV parsing and import planning', () => {
       description: 'First programmer',
       labelName: 'History',
       labelColor: 'blue',
+      metDate: null,
     });
   });
 
@@ -101,6 +103,7 @@ describe('CSV parsing and import planning', () => {
           description: 'Valid',
           labelName: 'Friends',
           labelColor: 'green',
+          metDate: null,
           rowNumber: 2,
         },
       ],
@@ -112,6 +115,24 @@ describe('CSV parsing and import planning', () => {
     const csv = `name\n${Array.from({ length: 5001 }, (_, index) => `Person ${index}`).join('\n')}`;
     expect(() => parsePeopleCsv(csv)).toThrow('more than 5,000 people');
   });
+
+  test('uses an optional met date as the person creation date', () => {
+    const parsed = parsePeopleCsv('name,met-date\nAda,2024-02-29\nGrace,');
+    const plan = createPeopleImportPlan(parsed, [], [], 'amber');
+
+    expect(plan.people[0].createdAt).toBe(new Date(2024, 1, 29).getTime());
+    expect(plan.people[1].createdAt).toBeGreaterThan(0);
+  });
+
+  test.each(['2026/08/14', '08-14-2026', '2026-02-30'])(
+    'skips a row with invalid met date %s',
+    (metDate) => {
+      expect(parsePeopleCsv(`name,met_date\nAda,${metDate}`)).toEqual({
+        people: [],
+        invalidRows: [2],
+      });
+    },
+  );
 
   test('reuses labels and skips duplicates case-insensitively', () => {
     const parsed = parsePeopleCsv(
