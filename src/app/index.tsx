@@ -1287,7 +1287,11 @@ export default function HomeScreen() {
                       },
                     ]}>
                     <View
-                      style={[styles.chevronBox, { backgroundColor: labelTheme.foreground }]}>
+                      style={[
+                        styles.chevronBox,
+                        condensedView && styles.chevronBoxCondensed,
+                        { backgroundColor: labelTheme.foreground },
+                      ]}>
                       <SymbolView
                         name={{
                           ios: 'chevron.right',
@@ -2430,7 +2434,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   sectionHeaderCondensed: {
-    minHeight: 41,
+    minHeight: 37,
   },
   sectionToggle: {
     flex: 1,
@@ -2440,7 +2444,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
   },
   sectionToggleCondensed: {
-    minHeight: 41,
+    minHeight: 37,
   },
   chevronBox: {
     width: 25,
@@ -2450,6 +2454,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+  },
+  chevronBoxCondensed: {
+    width: 21,
+    height: 21,
+    borderRadius: 7,
   },
   sectionTitle: {
     flex: 1,
