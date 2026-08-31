@@ -2429,7 +2429,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginBottom: 8,
   },
   sectionHeader: {
-    minHeight: 48,
+    minHeight: 43,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -2438,7 +2438,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   sectionToggle: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 43,
     paddingLeft: 15,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2447,8 +2447,8 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     minHeight: 37,
   },
   chevronBox: {
-    width: 25,
-    height: 25,
+    width: 24,
+    height: 24,
     borderRadius: 8,
     backgroundColor: theme.accentMuted,
     alignItems: 'center',
