@@ -11,6 +11,7 @@ const MEMORY_REMINDER_CHANNEL_ID = 'memory-reminders';
 type MemoryReminderData = {
   kind: typeof MEMORY_REMINDER_KIND;
   personId: string;
+  reminderAt?: number;
 };
 
 /** Checks whether notification data belongs to one of this app's reminders. */
@@ -58,6 +59,49 @@ function getReminderBody(person: Person) {
   return 'You met someone recently, but their name and description were not saved. Tap to reveal it.';
 }
 
+/** Builds the content shared by newly scheduled and refreshed reminders. */
+function getReminderContent(person: Person, reminderAt: number) {
+  return {
+    title: 'NameKeep memory reminder',
+    body: getReminderBody(person),
+    data: {
+      kind: MEMORY_REMINDER_KIND,
+      personId: person.id,
+      reminderAt,
+    },
+  };
+}
+
+/** Reads a pending reminder's delivery time, including requests from older builds. */
+function getReminderAt(
+  notification: Notifications.NotificationRequest,
+  now: number,
+): number | null {
+  const data = notification.content.data;
+  if (
+    isMemoryReminderData(data) &&
+    typeof data.reminderAt === 'number' &&
+    Number.isFinite(data.reminderAt)
+  ) {
+    return data.reminderAt;
+  }
+
+  const trigger = notification.trigger as unknown as Record<string, unknown> | null;
+  if (!trigger) return null;
+
+  if (trigger.type === 'timeInterval' && typeof trigger.seconds === 'number') {
+    return now + trigger.seconds * 1_000;
+  }
+
+  if (trigger.type !== 'date') return null;
+  const value = trigger.date ?? trigger.value ?? trigger.timestamp;
+  const timestamp = value instanceof Date ? value.getTime() : value;
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) return null;
+
+  // Native trigger payloads have historically used both seconds and milliseconds.
+  return timestamp < 100_000_000_000 ? timestamp * 1_000 : timestamp;
+}
+
 /** Asks for notification access when the device has not granted it yet. */
 export async function requestMemoryReminderPermission(): Promise<boolean> {
   if (!notificationsAreAvailable()) return false;
@@ -83,16 +127,51 @@ export async function scheduleMemoryReminders(
   await ensureMemoryReminderChannel();
 
   await Promise.all(
-    intervals.map((interval) =>
-      Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'NameKeep memory reminder',
-          body: getReminderBody(person),
-          data: { kind: MEMORY_REMINDER_KIND, personId: person.id },
-        },
+    intervals.map((interval) => {
+      const reminderAt = person.createdAt + interval * DAY_IN_MILLISECONDS;
+      return Notifications.scheduleNotificationAsync({
+        content: getReminderContent(person, reminderAt),
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: new Date(person.createdAt + interval * DAY_IN_MILLISECONDS),
+          date: new Date(reminderAt),
+          channelId:
+            Platform.OS === 'android'
+              ? MEMORY_REMINDER_CHANNEL_ID
+              : undefined,
+        },
+      });
+    }),
+  );
+}
+
+/** Replaces a person's pending reminders with updated text at the same times. */
+export async function refreshMemoryRemindersForPerson(
+  person: Person,
+): Promise<void> {
+  if (!notificationsAreAvailable()) return;
+
+  const now = Date.now();
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const reminders = scheduled.flatMap((notification) => {
+    const data = notification.content.data;
+    if (!isMemoryReminderData(data) || data.personId !== person.id) return [];
+
+    const reminderAt = getReminderAt(notification, now);
+    return reminderAt !== null && reminderAt > now
+      ? [{ identifier: notification.identifier, reminderAt }]
+      : [];
+  });
+  if (reminders.length === 0) return;
+
+  await ensureMemoryReminderChannel();
+  await Promise.all(
+    reminders.map(({ identifier, reminderAt }) =>
+      Notifications.scheduleNotificationAsync({
+        identifier,
+        content: getReminderContent(person, reminderAt),
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: new Date(reminderAt),
           channelId:
             Platform.OS === 'android'
               ? MEMORY_REMINDER_CHANNEL_ID

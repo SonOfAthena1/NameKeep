@@ -5,6 +5,7 @@ import type { Person } from '@/database/types';
 import {
   cancelMemoryRemindersForPeople,
   getMemoryReminderPersonId,
+  refreshMemoryRemindersForPerson,
   requestMemoryReminderPermission,
   scheduleMemoryReminders,
 } from '@/lib/memory-reminders';
@@ -88,7 +89,11 @@ describe('scheduling and cancellation', () => {
     const second = notifications.scheduleNotificationAsync.mock.calls[1][0];
     expect(first.content).toMatchObject({
       title: 'NameKeep memory reminder',
-      data: { kind: 'memory-reminder', personId: 'person-1' },
+      data: {
+        kind: 'memory-reminder',
+        personId: 'person-1',
+        reminderAt: createdAt + 24 * 60 * 60 * 1000,
+      },
     });
     expect(first.content.body).toContain('Met at a conference');
     expect(first.trigger).toMatchObject({ channelId: 'memory-reminders' });
@@ -117,6 +122,144 @@ describe('scheduling and cancellation', () => {
     await scheduleMemoryReminders(person(), []);
     expect(notifications.setNotificationChannelAsync).not.toHaveBeenCalled();
     expect(notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  test('refreshes only the edited person at the original delivery time', async () => {
+    const reminderAt = Date.now() + 60_000;
+    notifications.getAllScheduledNotificationsAsync.mockResolvedValue([
+      {
+        identifier: 'refresh-me',
+        content: {
+          body: 'Old details',
+          data: { kind: 'memory-reminder', personId: 'person-1', reminderAt },
+        },
+        trigger: { type: 'date', value: reminderAt },
+      },
+      {
+        identifier: 'keep-person',
+        content: {
+          data: {
+            kind: 'memory-reminder',
+            personId: 'person-2',
+            reminderAt,
+          },
+        },
+        trigger: { type: 'date', value: reminderAt },
+      },
+    ] as never);
+
+    await refreshMemoryRemindersForPerson(
+      person({ description: 'Updated conference details' }),
+    );
+
+    expect(notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+    expect(notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identifier: 'refresh-me',
+        content: expect.objectContaining({
+          body: expect.stringContaining('Updated conference details'),
+          data: expect.objectContaining({ reminderAt }),
+        }),
+        trigger: expect.objectContaining({
+          type: 'date',
+          date: new Date(reminderAt),
+        }),
+      }),
+    );
+  });
+
+  test('refreshes legacy Android and iOS reminder triggers', async () => {
+    const now = Date.now();
+    const androidReminderAt = now + 60_000;
+    notifications.getAllScheduledNotificationsAsync.mockResolvedValue([
+      {
+        identifier: 'legacy-android',
+        content: { data: { kind: 'memory-reminder', personId: 'person-1' } },
+        trigger: { type: 'date', value: androidReminderAt },
+      },
+      {
+        identifier: 'legacy-ios',
+        content: { data: { kind: 'memory-reminder', personId: 'person-1' } },
+        trigger: { type: 'timeInterval', seconds: 120 },
+      },
+    ] as never);
+
+    await refreshMemoryRemindersForPerson(person({ description: 'Updated' }));
+
+    expect(notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(2);
+    expect(notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identifier: 'legacy-android',
+        trigger: expect.objectContaining({ date: new Date(androidReminderAt) }),
+      }),
+    );
+    expect(notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        identifier: 'legacy-ios',
+        trigger: expect.objectContaining({
+          date: expect.any(Date),
+        }),
+      }),
+    );
+    const iosRequest = notifications.scheduleNotificationAsync.mock.calls
+      .map(([request]) => request)
+      .find((request) => request.identifier === 'legacy-ios');
+    expect(
+      new Date((iosRequest?.trigger as { date: Date }).date).getTime(),
+    ).toBeGreaterThanOrEqual(now + 119_000);
+  });
+
+  test('does not refresh expired or unrecognized reminders', async () => {
+    notifications.getAllScheduledNotificationsAsync.mockResolvedValue([
+      {
+        identifier: 'expired',
+        content: {
+          data: {
+            kind: 'memory-reminder',
+            personId: 'person-1',
+            reminderAt: Date.now() - 1,
+          },
+        },
+        trigger: { type: 'date', value: Date.now() - 1 },
+      },
+      {
+        identifier: 'unknown-trigger',
+        content: { data: { kind: 'memory-reminder', personId: 'person-1' } },
+        trigger: { type: 'unknown' },
+      },
+    ] as never);
+
+    await refreshMemoryRemindersForPerson(person());
+
+    expect(notifications.setNotificationChannelAsync).not.toHaveBeenCalled();
+    expect(notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  test('reports a refresh failure without cancelling the original reminder', async () => {
+    const reminderAt = Date.now() + 60_000;
+    notifications.getAllScheduledNotificationsAsync.mockResolvedValue([
+      {
+        identifier: 'original-reminder',
+        content: {
+          data: { kind: 'memory-reminder', personId: 'person-1', reminderAt },
+        },
+        trigger: { type: 'date', value: reminderAt },
+      },
+    ] as never);
+    notifications.scheduleNotificationAsync.mockRejectedValueOnce(
+      new Error('Native scheduler unavailable'),
+    );
+
+    await expect(refreshMemoryRemindersForPerson(person())).rejects.toThrow(
+      'Native scheduler unavailable',
+    );
+    expect(notifications.cancelScheduledNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  test('does not inspect scheduled reminders on web', async () => {
+    setPlatform('web');
+    await refreshMemoryRemindersForPerson(person());
+    expect(notifications.getAllScheduledNotificationsAsync).not.toHaveBeenCalled();
   });
 
   test('cancels only matching NameKeep reminders', async () => {

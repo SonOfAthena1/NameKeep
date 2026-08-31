@@ -64,6 +64,7 @@ import {
 import { useAppTheme, useTheme } from '@/hooks/use-theme';
 import {
   cancelMemoryRemindersForPeople,
+  refreshMemoryRemindersForPerson,
   requestMemoryReminderPermission,
   scheduleMemoryReminders,
 } from '@/lib/memory-reminders';
@@ -670,16 +671,33 @@ export default function HomeScreen() {
     try {
       if (editor?.kind === 'person' && editor.id) {
         const personId = editor.id;
+        const existingPerson = people.find((person) => person.id === personId);
+        if (!existingPerson) throw new Error(`Person ${personId} was not found.`);
+
         const updated = await updatePersonRecord(db, personId, updates);
         if (!updated) throw new Error(`Person ${personId} was not found.`);
-        if (isUnnamedPersonName(updates.name)) {
-          await cancelMemoryRemindersForPeople([personId]);
-        }
+        const updatedPerson: Person = { ...existingPerson, ...updates };
         setPeople((current) =>
           current.map((person) =>
-            person.id === personId ? { ...person, ...updates } : person,
+            person.id === personId ? updatedPerson : person,
           ),
         );
+        try {
+          if (isUnnamedPersonName(updates.name)) {
+            await cancelMemoryRemindersForPeople([personId]);
+          } else {
+            await refreshMemoryRemindersForPerson(updatedPerson);
+          }
+        } catch (error) {
+          console.error('Could not refresh reminders after editing a person', error);
+          const message =
+            'Your changes were saved, but NameKeep couldn\’t update this person\’s pending reminders. They may still show older details.';
+          if (Platform.OS === 'web') {
+            globalThis.alert(message);
+          } else {
+            Alert.alert('Reminders not updated', message);
+          }
+        }
       } else {
         const createdAt = Date.now();
         const person: Person = {
