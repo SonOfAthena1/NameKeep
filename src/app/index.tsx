@@ -1491,7 +1491,10 @@ export default function HomeScreen() {
             accessibilityState={{ expanded: isAddMenuOpen }}
             onPress={() => setIsAddMenuOpen((current) => !current)}
             style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}>
-            <Text style={[styles.addButtonText, isAddMenuOpen && styles.addButtonTextOpen]}>＋</Text>
+            <View style={[styles.addButtonIcon, isAddMenuOpen && styles.addButtonIconOpen]}>
+              <View style={styles.addButtonIconBar} />
+              <View style={[styles.addButtonIconBar, styles.addButtonIconBarVertical]} />
+            </View>
           </Pressable>
         )}
       </SafeAreaView>
@@ -2602,15 +2605,24 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: theme.accentStrong,
     transform: [{ scale: 0.96 }],
   },
-  addButtonText: {
-    color: theme.background,
-    fontSize: 31,
-    lineHeight: 34,
-    fontWeight: '500',
-    marginTop: -2,
+  addButtonIcon: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  addButtonTextOpen: {
+  addButtonIconOpen: {
     transform: [{ rotate: '45deg' }],
+  },
+  addButtonIconBar: {
+    position: 'absolute',
+    width: 23,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: theme.background,
+  },
+  addButtonIconBarVertical: {
+    transform: [{ rotate: '90deg' }],
   },
   addMenu: {
     position: 'absolute',
