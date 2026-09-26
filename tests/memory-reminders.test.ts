@@ -95,13 +95,23 @@ describe('scheduling and cancellation', () => {
         reminderAt: createdAt + 24 * 60 * 60 * 1000,
       },
     });
-    expect(first.content.body).toContain('Met at a conference');
+    expect(first.content.body).toBe(
+      'You met someone described as: “Met at a conference”\nDo you remember their name? Tap to reveal it.',
+    );
     expect(first.trigger).toMatchObject({ channelId: 'memory-reminders' });
     expect(new Date((first.trigger as { date: Date }).date).getTime()).toBe(
       createdAt + 24 * 60 * 60 * 1000,
     );
     expect(new Date((second.trigger as { date: Date }).date).getTime()).toBe(
       createdAt + 7 * 24 * 60 * 60 * 1000,
+    );
+  });
+
+  test('includes the label and description in the requested wording', async () => {
+    await scheduleMemoryReminders(person({ labelId: 'work' }), [1], 'Work');
+
+    expect(notifications.scheduleNotificationAsync.mock.calls[0][0].content.body).toBe(
+      'You met someone from Work: “Met at a conference”, can you remember their name?\nTap to reveal it.',
     );
   });
 
@@ -149,7 +159,8 @@ describe('scheduling and cancellation', () => {
     ] as never);
 
     await refreshMemoryRemindersForPerson(
-      person({ description: 'Updated conference details' }),
+      person({ description: 'Updated conference details', labelId: 'work' }),
+      'Work',
     );
 
     expect(notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
@@ -157,7 +168,7 @@ describe('scheduling and cancellation', () => {
       expect.objectContaining({
         identifier: 'refresh-me',
         content: expect.objectContaining({
-          body: expect.stringContaining('Updated conference details'),
+          body: 'You met someone from Work: “Updated conference details”, can you remember their name?\nTap to reveal it.',
           data: expect.objectContaining({ reminderAt }),
         }),
         trigger: expect.objectContaining({

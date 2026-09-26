@@ -44,26 +44,29 @@ async function ensureMemoryReminderChannel(): Promise<void> {
 }
 
 /** Creates a quiz prompt without revealing a placeholder name as though it were real. */
-function getReminderBody(person: Person) {
+function getReminderBody(person: Person, labelName: string | null) {
   const description = person.description.trim();
   if (description) {
+    if (labelName) {
+      return `You met someone from ${labelName}: “${description}”, can you remember their name?\nTap to reveal it.`;
+    }
     return `You met someone described as: “${description}”\nDo you remember their name? Tap to reveal it.`;
   }
 
   const name = person.name.trim();
   if (name && !isUnnamedPersonName(name)) {
     const initial = Array.from(name)[0]?.toUpperCase();
-    return `You met someone recently whose name started with: ${initial}. Do you remember their name? Tap to reveal it.`;
+    return `You met someone ${labelName ? `from ${labelName}` : 'recently'} whose name started with: ${initial}. Do you remember their name? Tap to reveal it.`;
   }
 
-  return 'You met someone recently, but their name and description were not saved. Tap to reveal it.';
+  return `You met someone ${labelName ? `from ${labelName}` : 'recently'}, but their name and description were not saved. Tap to reveal it.`;
 }
 
 /** Builds the content shared by newly scheduled and refreshed reminders. */
-function getReminderContent(person: Person, reminderAt: number) {
+function getReminderContent(person: Person, reminderAt: number, labelName: string | null) {
   return {
     title: 'NameKeep memory reminder',
-    body: getReminderBody(person),
+    body: getReminderBody(person, labelName),
     data: {
       kind: MEMORY_REMINDER_KIND,
       personId: person.id,
@@ -119,6 +122,7 @@ export async function requestMemoryReminderPermission(): Promise<boolean> {
 export async function scheduleMemoryReminders(
   person: Person,
   intervals: MemoryReminderInterval[],
+  labelName: string | null = null,
 ): Promise<void> {
   if (!notificationsAreAvailable() || intervals.length === 0) {
     return;
@@ -130,7 +134,7 @@ export async function scheduleMemoryReminders(
     intervals.map((interval) => {
       const reminderAt = person.createdAt + interval * DAY_IN_MILLISECONDS;
       return Notifications.scheduleNotificationAsync({
-        content: getReminderContent(person, reminderAt),
+        content: getReminderContent(person, reminderAt, labelName),
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(reminderAt),
@@ -147,6 +151,7 @@ export async function scheduleMemoryReminders(
 /** Replaces a person's pending reminders with updated text at the same times. */
 export async function refreshMemoryRemindersForPerson(
   person: Person,
+  labelName: string | null = null,
 ): Promise<void> {
   if (!notificationsAreAvailable()) return;
 
@@ -168,7 +173,7 @@ export async function refreshMemoryRemindersForPerson(
     reminders.map(({ identifier, reminderAt }) =>
       Notifications.scheduleNotificationAsync({
         identifier,
-        content: getReminderContent(person, reminderAt),
+        content: getReminderContent(person, reminderAt, labelName),
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
           date: new Date(reminderAt),

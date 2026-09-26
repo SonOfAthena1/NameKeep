@@ -120,6 +120,21 @@ const SAMPLE_PEOPLE: Person[] = [
 ];
 
 const CONTROL_CORNER_RADIUS = 14;
+
+/** Updates queued reminder text after people or their label changes. */
+async function refreshPendingReminders(
+  people: Person[],
+  labelName: string | null,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    people.map((person) => refreshMemoryRemindersForPerson(person, labelName)),
+  );
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      console.error('Could not refresh a pending memory reminder', result.reason);
+    }
+  }
+}
 /** Sorts named items by date or name without changing the original list. */
 function sortByOrder<T extends { name: string; createdAt: number }>(
   items: T[],
@@ -440,6 +455,10 @@ export default function HomeScreen() {
           movedIds.has(person.id) ? { ...person, labelId } : person,
         ),
       );
+      await refreshPendingReminders(
+        peopleToMove.map((person) => ({ ...person, labelId })),
+        labels.find((label) => label.id === labelId)?.name ?? null,
+      );
       exitSelectionMode();
     } catch (error) {
       showMutationError('move these people', error);
@@ -686,7 +705,10 @@ export default function HomeScreen() {
           if (isUnnamedPersonName(updates.name)) {
             await cancelMemoryRemindersForPeople([personId]);
           } else {
-            await refreshMemoryRemindersForPerson(updatedPerson);
+            await refreshMemoryRemindersForPerson(
+              updatedPerson,
+              labels.find((label) => label.id === updatedPerson.labelId)?.name ?? null,
+            );
           }
         } catch (error) {
           console.error('Could not refresh reminders after editing a person', error);
@@ -707,7 +729,11 @@ export default function HomeScreen() {
         };
         await createPersonRecord(db, person);
         setPeople((current) => [...current, person]);
-        await scheduleMemoryReminders(person, memoryReminderIntervals);
+        await scheduleMemoryReminders(
+          person,
+          memoryReminderIntervals,
+          labels.find((label) => label.id === person.labelId)?.name ?? null,
+        );
       }
       closeEditor();
     } catch (error) {
@@ -745,6 +771,12 @@ export default function HomeScreen() {
               : label,
           ),
         );
+        if (labels.find((label) => label.id === labelId)?.name !== trimmedName) {
+          await refreshPendingReminders(
+            people.filter((person) => person.labelId === labelId),
+            trimmedName,
+          );
+        }
       } else {
         const createdAt = Date.now();
         const label: Label = {
@@ -904,6 +936,14 @@ export default function HomeScreen() {
       setLabels((current) =>
         current.filter((label) => label.id !== deletedLabelId),
       );
+      if (!movePeopleToTrash) {
+        await refreshPendingReminders(
+          people
+            .filter((person) => person.labelId === deletedLabelId)
+            .map((person) => ({ ...person, labelId: deleteDestinationLabelId })),
+          labels.find((label) => label.id === deleteDestinationLabelId)?.name ?? null,
+        );
+      }
       setCollapsedLabelIds((current) => {
         const next = new Set(current);
         next.delete(deletedLabelId);
@@ -965,6 +1005,15 @@ export default function HomeScreen() {
                 : person,
             ),
       );
+      if (!movePeopleToTrash) {
+        await refreshPendingReminders(
+          peopleToHandle.map((person) => ({
+            ...person,
+            labelId: deleteDestinationLabelId,
+          })),
+          labels.find((label) => label.id === deleteDestinationLabelId)?.name ?? null,
+        );
+      }
       setCollapsedLabelIds((current) => {
         const next = new Set(current);
         next.delete('no-label');
