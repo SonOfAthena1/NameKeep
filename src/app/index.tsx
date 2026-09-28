@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useErrorReporter } from '@/components/app-error-dialog';
 import {
   LABEL_COLOR_OPTIONS,
   LabelColors,
@@ -221,6 +222,7 @@ export default function HomeScreen() {
   const [isBulkActionSaving, setIsBulkActionSaving] = useState(false);
   const db = useSQLiteContext();
   const theme = useTheme();
+  const { showError } = useErrorReporter();
   const { colorScheme, themePreference, setThemePreference } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -293,6 +295,7 @@ export default function HomeScreen() {
       } catch (error) {
         if (cancelled) return;
         console.error('Could not load database state', error);
+        showError(error, 'NameKeep could not load your saved data.');
         setDatabaseLoadError(
           error instanceof Error ? error.message : 'Unknown database error',
         );
@@ -305,7 +308,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [databaseLoadAttempt, db, setThemePreference]);
+  }, [databaseLoadAttempt, db, setThemePreference, showError]);
 
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -616,12 +619,7 @@ export default function HomeScreen() {
   /** Logs a save problem and shows a clear message without changing the screen. */
   function showMutationError(action: string, error: unknown) {
     console.error(`Could not ${action}`, error);
-    const message = `NameKeep couldn’t ${action}. Your saved data has not been changed.`;
-    if (Platform.OS === 'web') {
-      globalThis.alert(message);
-      return;
-    }
-    Alert.alert('Couldn’t save changes', message);
+    showError(error, `NameKeep couldn’t ${action}. Your saved data has not been changed.`);
   }
 
   /** Saves a setting first, then updates the screen after it succeeds. */

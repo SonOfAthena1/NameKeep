@@ -12,6 +12,7 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useEffect, useLayoutEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 
+import { AppErrorProvider } from '@/components/app-error-dialog';
 import { Colors } from '@/constants/theme';
 import { migrateDatabase } from '@/database/migrate';
 import { AppThemeProvider, useAppTheme } from '@/hooks/use-theme';
@@ -71,7 +72,9 @@ export default function RootLayout() {
 
   return (
     <AppThemeProvider>
-      <RootNavigator notificationCoordinator={notificationCoordinator} />
+      <AppErrorProvider>
+        <RootNavigator notificationCoordinator={notificationCoordinator} />
+      </AppErrorProvider>
     </AppThemeProvider>
   );
 }
