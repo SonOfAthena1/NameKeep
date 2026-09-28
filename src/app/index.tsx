@@ -809,11 +809,31 @@ export default function HomeScreen() {
   }
 
   /** Checks and saves the label currently open in the editor. */
-  async function saveLabel() {
+  async function saveLabel(confirmedDuplicate = false) {
     if (isEditorSaving) return;
 
     const trimmedName = labelName.trim();
     if (editor?.kind === 'label' && !trimmedName) {
+      return;
+    }
+
+    if (
+      editor?.kind === 'label' &&
+      !editor.id &&
+      !confirmedDuplicate &&
+      labels.some(
+        (label) => normalizeLabelName(label.name) === normalizeLabelName(trimmedName),
+      )
+    ) {
+      const message = `A label named “${trimmedName}” already exists. Create a duplicate?`;
+      if (Platform.OS === 'web') {
+        if (globalThis.confirm(message)) void saveLabel(true);
+      } else {
+        Alert.alert('Label already exists', message, [
+          { text: 'No', style: 'cancel' },
+          { text: 'Create duplicate', onPress: () => void saveLabel(true) },
+        ]);
+      }
       return;
     }
 
@@ -1949,7 +1969,7 @@ export default function HomeScreen() {
                         autoFocus
                         maxLength={LABEL_MAX_LENGTH}
                         onChangeText={setLabelName}
-                        onSubmitEditing={saveLabel}
+                        onSubmitEditing={() => void saveLabel()}
                         placeholder="For example, Work or Biology"
                         placeholderTextColor={theme.textFaint}
                         returnKeyType="done"
@@ -2039,7 +2059,7 @@ export default function HomeScreen() {
                     isEditorSaving ||
                     (editor?.kind === 'label' && !labelName.trim())
                   }
-                  onPress={editor?.kind === 'person' ? savePerson : saveLabel}
+                  onPress={editor?.kind === 'person' ? savePerson : () => void saveLabel()}
                   style={({ pressed }) => [
                     styles.saveButton,
                     (editor?.id || editor?.kind === 'noLabel') &&
