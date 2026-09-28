@@ -604,6 +604,15 @@ export default function HomeScreen() {
     setLabelColor(defaultLabelColor);
   }
 
+  /** Returns to person details before dismissing the editor on system back. */
+  function handleEditorRequestClose() {
+    if (editor?.kind === 'person' && isLabelPickerOpen) {
+      setIsLabelPickerOpen(false);
+      return;
+    }
+    closeEditor();
+  }
+
   /** Logs a save problem and shows a clear message without changing the screen. */
   function showMutationError(action: string, error: unknown) {
     console.error(`Could not ${action}`, error);
@@ -1628,7 +1637,7 @@ export default function HomeScreen() {
 
       <Modal
         animationType="fade"
-        onRequestClose={closeEditor}
+        onRequestClose={handleEditorRequestClose}
         presentationStyle="overFullScreen"
         transparent
         visible={editor !== null}>
