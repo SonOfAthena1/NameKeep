@@ -128,15 +128,21 @@ const CONTROL_CORNER_RADIUS = 14;
 async function refreshPendingReminders(
   people: Person[],
   labelName: string | null,
+  reportError: (error: unknown) => void,
 ): Promise<void> {
   const results = await Promise.allSettled(
     people.map((person) => refreshMemoryRemindersForPerson(person, labelName)),
   );
+  let firstError: unknown;
+  let hasError = false;
   for (const result of results) {
     if (result.status === 'rejected') {
       console.error('Could not refresh a pending memory reminder', result.reason);
+      if (!hasError) firstError = result.reason;
+      hasError = true;
     }
   }
+  if (hasError) reportError(firstError);
 }
 /** Sorts named items by date or name without changing the original list. */
 function sortByOrder<T extends { name: string; createdAt: number }>(
@@ -290,6 +296,7 @@ export default function HomeScreen() {
             await cancelMemoryRemindersForPeople(unnamedPersonIds);
           } catch (error) {
             console.error('Could not cancel reminders for unnamed people', error);
+            showError(error, 'Your people loaded, but NameKeep could not clear reminders for unnamed people.');
           }
         }
       } catch (error) {
@@ -486,6 +493,7 @@ export default function HomeScreen() {
       await refreshPendingReminders(
         peopleToMove.map((person) => ({ ...person, labelId })),
         labels.find((label) => label.id === labelId)?.name ?? null,
+        (error) => showError(error, 'People were moved, but some pending reminders could not be updated.'),
       );
       exitSelectionMode();
     } catch (error) {
@@ -513,8 +521,9 @@ export default function HomeScreen() {
             if (!moved) throw new Error(`Person ${person.id} was not found.`);
           }
         });
-        await cancelMemoryRemindersForPeople(
+        await cancelRemindersAfterSave(
           peopleToMove.map((person) => person.id),
+          'People were moved to Trash, but some pending reminders could not be cancelled.',
         );
         const movedIds = new Set(peopleToMove.map((person) => person.id));
         setTrash((current) => [
@@ -622,6 +631,16 @@ export default function HomeScreen() {
     showError(error, `NameKeep couldn’t ${action}. Your saved data has not been changed.`);
   }
 
+  /** Keeps a successful data change visible if reminder cleanup fails afterward. */
+  async function cancelRemindersAfterSave(personIds: string[], context: string) {
+    try {
+      await cancelMemoryRemindersForPeople(personIds);
+    } catch (error) {
+      console.error('Could not cancel pending memory reminders', error);
+      showError(error, context);
+    }
+  }
+
   /** Saves a setting first, then updates the screen after it succeeds. */
   async function persistSetting(
     patch: SettingsPatch,
@@ -693,16 +712,20 @@ export default function HomeScreen() {
     interval: MemoryReminderInterval,
     enabled: boolean,
   ) {
-    if (
-      Platform.OS !== 'web' &&
-      enabled &&
-      !(await requestMemoryReminderPermission())
-    ) {
-      Alert.alert(
-        'Notifications are off',
-        'Allow notifications for NameKeep in your device settings to use memory reminders.',
-      );
-      return;
+    if (Platform.OS !== 'web' && enabled) {
+      try {
+        if (!(await requestMemoryReminderPermission())) {
+          Alert.alert(
+            'Notifications are off',
+            'Allow notifications for NameKeep in your device settings to use memory reminders.',
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Could not request memory reminder permission', error);
+        showError(error, 'NameKeep could not check notification permission.');
+        return;
+      }
     }
 
     const nextIntervals = enabled
@@ -752,11 +775,7 @@ export default function HomeScreen() {
           console.error('Could not refresh reminders after editing a person', error);
           const message =
             'Your changes were saved, but NameKeep couldn\’t update this person\’s pending reminders. They may still show older details.';
-          if (Platform.OS === 'web') {
-            globalThis.alert(message);
-          } else {
-            Alert.alert('Reminders not updated', message);
-          }
+          showError(error, message);
         }
       } else {
         const createdAt = Date.now();
@@ -790,11 +809,7 @@ export default function HomeScreen() {
           console.error('Could not schedule reminders after adding a person', error);
           const message =
             'This person was saved, but NameKeep couldn’t schedule their memory reminders.';
-          if (Platform.OS === 'web') {
-            globalThis.alert(message);
-          } else {
-            Alert.alert('Reminders not scheduled', message);
-          }
+          showError(error, message);
         }
         return;
       }
@@ -858,6 +873,7 @@ export default function HomeScreen() {
           await refreshPendingReminders(
             people.filter((person) => person.labelId === labelId),
             trimmedName,
+            (error) => showError(error, 'The label was saved, but some pending reminders could not be updated.'),
           );
         }
       } else {
@@ -914,7 +930,10 @@ export default function HomeScreen() {
       try {
         const moved = await movePersonToTrash(db, id, deletedAt);
         if (!moved) throw new Error(`Person ${id} was not found.`);
-        await cancelMemoryRemindersForPeople([id]);
+        await cancelRemindersAfterSave(
+          [id],
+          'This person was moved to Trash, but pending reminders could not be cancelled.',
+        );
         setTrash((currentTrash) => [
           { ...deletedPerson, deletedAt },
           ...currentTrash,
@@ -997,8 +1016,9 @@ export default function HomeScreen() {
       );
 
       if (deletedPeople.length > 0) {
-        await cancelMemoryRemindersForPeople(
+        await cancelRemindersAfterSave(
           deletedPeople.map((person) => person.id),
+          'The label was deleted, but some pending reminders could not be cancelled.',
         );
         setTrash((currentTrash) => [
           ...deletedPeople.map((person) => ({ ...person, deletedAt })),
@@ -1025,6 +1045,7 @@ export default function HomeScreen() {
             .filter((person) => person.labelId === deletedLabelId)
             .map((person) => ({ ...person, labelId: deleteDestinationLabelId })),
           labels.find((label) => label.id === deleteDestinationLabelId)?.name ?? null,
+          (error) => showError(error, 'The label was deleted, but some pending reminders could not be updated.'),
         );
       }
       setCollapsedLabelIds((current) => {
@@ -1071,7 +1092,10 @@ export default function HomeScreen() {
       });
 
       if (movePeopleToTrash && peopleToHandle.length > 0) {
-        await cancelMemoryRemindersForPeople(peopleToHandle.map((person) => person.id));
+        await cancelRemindersAfterSave(
+          peopleToHandle.map((person) => person.id),
+          'People were moved to Trash, but some pending reminders could not be cancelled.',
+        );
         setTrash((currentTrash) => [
           ...peopleToHandle.map((person) => ({ ...person, deletedAt })),
           ...currentTrash,
@@ -1095,6 +1119,7 @@ export default function HomeScreen() {
             labelId: deleteDestinationLabelId,
           })),
           labels.find((label) => label.id === deleteDestinationLabelId)?.name ?? null,
+          (error) => showError(error, 'People were moved, but some pending reminders could not be updated.'),
         );
       }
       setCollapsedLabelIds((current) => {
