@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { createPersonWithLabel } from '@/database/create-person-with-label';
 import {
   createLabel,
   deleteLabelAndHandlePeople,
@@ -87,6 +88,87 @@ describe('SQLite persistence', () => {
     await movePersonToTrash(database, 'ada', 60);
     await expect(deletePersonPermanently(database, 'ada')).resolves.toBe(true);
     await expect(listTrashedPeople(database)).resolves.toEqual([]);
+  });
+
+  test('creates a typed label before saving the person who uses it', async () => {
+    const result = await createPersonWithLabel(database, {
+      person: { id: 'ada', name: 'Ada', description: 'Conference', createdAt: 20 },
+      label: { kind: 'typed', name: '  Friends  ' },
+      defaultLabelColor: 'blue',
+    });
+
+    expect(result.createdLabel).toMatchObject({ name: 'Friends', color: 'blue' });
+    expect(result.person.labelId).toBe(result.createdLabel?.id);
+    expect((await listActivePeople(database))[0]?.labelId).toBe(result.label?.id);
+    expect(await listActiveLabels(database)).toHaveLength(1);
+  });
+
+  test('reuses an existing label for a case-insensitive typed match', async () => {
+    await createLabel(database, {
+      id: 'friends',
+      name: 'Friends',
+      color: 'green',
+      createdAt: 10,
+    });
+
+    const result = await createPersonWithLabel(database, {
+      person: { id: 'ada', name: 'Ada', description: '' },
+      label: { kind: 'typed', name: '  fRiEnDs  ' },
+      defaultLabelColor: 'blue',
+    });
+
+    expect(result.person.labelId).toBe('friends');
+    expect(result.createdLabel).toBeNull();
+    expect(await listActiveLabels(database)).toHaveLength(1);
+  });
+
+  test('keeps an empty typed label as No Label', async () => {
+    const result = await createPersonWithLabel(database, {
+      person: { id: 'ada', name: 'Ada', description: '' },
+      label: { kind: 'typed', name: '   ' },
+      defaultLabelColor: 'blue',
+    });
+
+    expect(result.person.labelId).toBeNull();
+    expect(result.createdLabel).toBeNull();
+    expect(await listActiveLabels(database)).toEqual([]);
+  });
+
+  test('uses an explicitly selected existing label', async () => {
+    await createLabel(database, {
+      id: 'friends',
+      name: 'Friends',
+      color: 'green',
+    });
+
+    const result = await createPersonWithLabel(database, {
+      person: { id: 'ada', name: 'Ada', description: '' },
+      label: { kind: 'existing', id: 'friends' },
+      defaultLabelColor: 'blue',
+    });
+
+    expect(result.person.labelId).toBe('friends');
+    expect(result.createdLabel).toBeNull();
+  });
+
+  test('rolls back a new label when saving its person fails', async () => {
+    await createPerson(database, {
+      id: 'ada',
+      name: 'Original Ada',
+      description: '',
+      labelId: null,
+    });
+
+    await expect(
+      createPersonWithLabel(database, {
+        person: { id: 'ada', name: 'Second Ada', description: '' },
+        label: { kind: 'typed', name: 'Friends' },
+        defaultLabelColor: 'blue',
+      }),
+    ).rejects.toThrow();
+
+    expect(await listActiveLabels(database)).toEqual([]);
+    expect((await getActivePerson(database, 'ada'))?.name).toBe('Original Ada');
   });
 
   test('reassigns people and clears a deleted default label atomically', async () => {
