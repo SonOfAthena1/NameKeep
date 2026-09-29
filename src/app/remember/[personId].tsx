@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useErrorReporter } from '@/components/app-error-dialog';
 import type { AppTheme } from '@/constants/theme';
 import { listActiveLabels } from '@/database/labels-repository';
 import { getActivePerson } from '@/database/people-repository';
@@ -16,35 +17,45 @@ export default function RememberPersonScreen() {
   const db = useSQLiteContext();
   const router = useRouter();
   const theme = useTheme();
+  const { showError } = useErrorReporter();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [person, setPerson] = useState<Person | null>(null);
   const [labelName, setLabelName] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadPerson() {
-      const [storedPerson, labels] = await Promise.all([
-        getActivePerson(db, personId),
-        listActiveLabels(db),
-      ]);
-      if (cancelled) return;
+      try {
+        const [storedPerson, labels] = await Promise.all([
+          getActivePerson(db, personId),
+          listActiveLabels(db),
+        ]);
+        if (cancelled) return;
 
-      if (storedPerson) {
-        setPerson(storedPerson);
-        setLabelName(
-          labels.find((label) => label.id === storedPerson.labelId)?.name ?? null,
-        );
+        if (storedPerson) {
+          setPerson(storedPerson);
+          setLabelName(
+            labels.find((label) => label.id === storedPerson.labelId)?.name ?? null,
+          );
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Could not load memory reminder', error);
+        setLoadFailed(true);
+        showError(error, 'NameKeep could not load this memory reminder.');
+      } finally {
+        if (!cancelled) setIsLoaded(true);
       }
-      setIsLoaded(true);
     }
 
     void loadPerson();
     return () => {
       cancelled = true;
     };
-  }, [db, personId]);
+  }, [db, personId, showError]);
 
   return (
     <View style={styles.screen}>
@@ -69,6 +80,8 @@ export default function RememberPersonScreen() {
               )}
               {labelName && <Text style={styles.label}>{labelName}</Text>}
             </>
+          ) : loadFailed ? (
+            <Text style={styles.message}>Couldn’t load this reminder.</Text>
           ) : isLoaded ? (
             <Text style={styles.message}>
               This person is no longer available.

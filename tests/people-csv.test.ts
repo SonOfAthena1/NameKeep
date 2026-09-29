@@ -86,7 +86,7 @@ describe('CSV parsing and import planning', () => {
   });
 
   test('reports invalid rows without discarding valid rows', () => {
-    const tooLongName = 'x'.repeat(31);
+    const tooLongName = 'x'.repeat(36);
     const csv = [
       'name,description,label,label_color',
       'Ada,Valid,Friends,green',

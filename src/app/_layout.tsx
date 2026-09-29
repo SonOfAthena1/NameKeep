@@ -12,6 +12,8 @@ import { SQLiteProvider } from 'expo-sqlite';
 import { useEffect, useLayoutEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 
+import { AppErrorProvider, useErrorReporter } from '@/components/app-error-dialog';
+import { AppErrorBoundary, ScreenErrorBoundary } from '@/components/app-error-recovery';
 import { Colors } from '@/constants/theme';
 import { migrateDatabase } from '@/database/migrate';
 import { AppThemeProvider, useAppTheme } from '@/hooks/use-theme';
@@ -34,6 +36,21 @@ if (Platform.OS !== 'web') {
 
 /** Sets up the app-wide theme provider and navigation shell. */
 export default function RootLayout() {
+  return (
+    <AppThemeProvider>
+      <AppErrorBoundary>
+        <AppErrorProvider>
+          <RootNavigator />
+        </AppErrorProvider>
+      </AppErrorBoundary>
+    </AppThemeProvider>
+  );
+}
+
+/** Applies the selected colors to navigation and opens the app database. */
+function RootNavigator() {
+  const { colorScheme } = useAppTheme();
+  const { showError } = useErrorReporter();
   const notificationCoordinator = useMemo(
     () =>
       new MemoryReminderNotificationResponseCoordinator({
@@ -44,13 +61,12 @@ export default function RootLayout() {
           } as Href),
         clearLastResponse: () =>
           Notifications.clearLastNotificationResponse(),
-        onError: (error) =>
-          console.error(
-            'Could not handle memory reminder notification response',
-            error,
-          ),
+        onError: (error) => {
+          console.error('Could not handle memory reminder notification response', error);
+          showError(error, 'NameKeep had a problem handling a memory reminder.');
+        },
       }),
-    [],
+    [showError],
   );
 
   useLayoutEffect(() => {
@@ -69,20 +85,6 @@ export default function RootLayout() {
     return () => subscription.remove();
   }, [notificationCoordinator]);
 
-  return (
-    <AppThemeProvider>
-      <RootNavigator notificationCoordinator={notificationCoordinator} />
-    </AppThemeProvider>
-  );
-}
-
-/** Applies the selected colors to navigation and opens the app database. */
-function RootNavigator({
-  notificationCoordinator,
-}: {
-  notificationCoordinator: MemoryReminderNotificationResponseCoordinator;
-}) {
-  const { colorScheme } = useAppTheme();
   const colors = Colors[colorScheme];
   const baseTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
   const navigationTheme = {
@@ -101,7 +103,10 @@ function RootNavigator({
   return (
     <ThemeProvider value={navigationTheme}>
       <SQLiteProvider databaseName="namekeep.db" onInit={migrateDatabase}>
-        <Stack screenOptions={{ headerShown: false }} />
+        <Stack
+          screenOptions={{ headerShown: false }}
+          unstable_screenErrorBoundary={ScreenErrorBoundary}
+        />
         <NotificationNavigationReadiness
           notificationCoordinator={notificationCoordinator}
         />

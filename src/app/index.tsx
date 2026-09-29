@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useErrorReporter } from '@/components/app-error-dialog';
 import {
   LABEL_COLOR_OPTIONS,
   LabelColors,
@@ -34,6 +35,7 @@ import {
   type TrashedPerson,
 } from '@/components/settings-screen';
 import type { AppTheme, ThemePreference } from '@/constants/theme';
+import { createPersonWithLabel } from '@/database/create-person-with-label';
 import {
   createLabel as createLabelRecord,
   deleteLabelAndHandlePeople,
@@ -69,6 +71,7 @@ import {
   scheduleMemoryReminders,
 } from '@/lib/memory-reminders';
 import { getRandomUnnamedPersonName, isUnnamedPersonName } from '@/lib/names';
+import { normalizeLabelName } from '@/lib/label-names';
 
 const SAMPLE_LABELS: Label[] = [
   { id: 'work', name: 'Work', color: 'green', createdAt: 1_755_907_200_000 },
@@ -125,15 +128,21 @@ const CONTROL_CORNER_RADIUS = 14;
 async function refreshPendingReminders(
   people: Person[],
   labelName: string | null,
+  reportError: (error: unknown) => void,
 ): Promise<void> {
   const results = await Promise.allSettled(
     people.map((person) => refreshMemoryRemindersForPerson(person, labelName)),
   );
+  let firstError: unknown;
+  let hasError = false;
   for (const result of results) {
     if (result.status === 'rejected') {
       console.error('Could not refresh a pending memory reminder', result.reason);
+      if (!hasError) firstError = result.reason;
+      hasError = true;
     }
   }
+  if (hasError) reportError(firstError);
 }
 /** Sorts named items by date or name without changing the original list. */
 function sortByOrder<T extends { name: string; createdAt: number }>(
@@ -192,6 +201,9 @@ export default function HomeScreen() {
   const [personName, setPersonName] = useState('');
   const [personDescription, setPersonDescription] = useState('');
   const [personLabelId, setPersonLabelId] = useState<string | null>(null);
+  const [personLabelInput, setPersonLabelInput] = useState('');
+  const [isPersonLabelTyping, setIsPersonLabelTyping] = useState(false);
+  const [isLabelSuggestionsOpen, setIsLabelSuggestionsOpen] = useState(false);
   const [isLabelPickerOpen, setIsLabelPickerOpen] = useState(false);
   const [labelName, setLabelName] = useState('');
   const [labelColor, setLabelColor] = useState<LabelColor>('green');
@@ -216,6 +228,7 @@ export default function HomeScreen() {
   const [isBulkActionSaving, setIsBulkActionSaving] = useState(false);
   const db = useSQLiteContext();
   const theme = useTheme();
+  const { showError } = useErrorReporter();
   const { colorScheme, themePreference, setThemePreference } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
 
@@ -283,11 +296,13 @@ export default function HomeScreen() {
             await cancelMemoryRemindersForPeople(unnamedPersonIds);
           } catch (error) {
             console.error('Could not cancel reminders for unnamed people', error);
+            showError(error, 'Your people loaded, but NameKeep could not clear reminders for unnamed people.');
           }
         }
       } catch (error) {
         if (cancelled) return;
         console.error('Could not load database state', error);
+        showError(error, 'NameKeep could not load your saved data.');
         setDatabaseLoadError(
           error instanceof Error ? error.message : 'Unknown database error',
         );
@@ -300,7 +315,7 @@ export default function HomeScreen() {
     return () => {
       cancelled = true;
     };
-  }, [databaseLoadAttempt, db, setThemePreference]);
+  }, [databaseLoadAttempt, db, setThemePreference, showError]);
 
   const sections = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -349,6 +364,26 @@ export default function HomeScreen() {
   }, [labelSortOrder, labels, noLabelColor, people, peopleSortOrder, search]);
 
   const newestLabels = useMemo(() => sortByOrder(labels, 'newest'), [labels]);
+  const labelSuggestions = useMemo(() => {
+    if (!isPersonLabelTyping || !personLabelInput.trim()) {
+      return newestLabels.slice(0, 4);
+    }
+    const query = normalizeLabelName(personLabelInput);
+    return newestLabels
+      .filter((label) => normalizeLabelName(label.name).includes(query))
+      .sort((a, b) => {
+        const aStarts = normalizeLabelName(a.name).startsWith(query);
+        const bStarts = normalizeLabelName(b.name).startsWith(query);
+        return Number(bStarts) - Number(aStarts);
+      })
+      .slice(0, 4);
+  }, [isPersonLabelTyping, newestLabels, personLabelInput]);
+  const newLabelName = isPersonLabelTyping ? personLabelInput.trim() : '';
+  const willCreateLabel =
+    !!newLabelName &&
+    !labels.some(
+      (label) => normalizeLabelName(label.name) === normalizeLabelName(newLabelName),
+    );
   const selectedLabelName =
     labels.find((label) => label.id === personLabelId)?.name ?? 'No Label';
   const labelBeingDeleted = labels.find((label) => label.id === labelDeleteId);
@@ -458,6 +493,7 @@ export default function HomeScreen() {
       await refreshPendingReminders(
         peopleToMove.map((person) => ({ ...person, labelId })),
         labels.find((label) => label.id === labelId)?.name ?? null,
+        (error) => showError(error, 'People were moved, but some pending reminders could not be updated.'),
       );
       exitSelectionMode();
     } catch (error) {
@@ -485,8 +521,9 @@ export default function HomeScreen() {
             if (!moved) throw new Error(`Person ${person.id} was not found.`);
           }
         });
-        await cancelMemoryRemindersForPeople(
+        await cancelRemindersAfterSave(
           peopleToMove.map((person) => person.id),
+          'People were moved to Trash, but some pending reminders could not be cancelled.',
         );
         const movedIds = new Set(peopleToMove.map((person) => person.id));
         setTrash((current) => [
@@ -527,11 +564,11 @@ export default function HomeScreen() {
   function openCreateModal(kind: 'person' | 'label') {
     setIsAddMenuOpen(false);
     if (kind === 'person') {
-      setPersonLabelId(
-        labels.some((label) => label.id === defaultLabelId)
-          ? defaultLabelId
-          : null,
-      );
+      const initialLabel = labels.find((label) => label.id === defaultLabelId);
+      setPersonLabelId(initialLabel?.id ?? null);
+      setPersonLabelInput(initialLabel?.name ?? '');
+      setIsPersonLabelTyping(false);
+      setIsLabelSuggestionsOpen(false);
     } else {
       setLabelColor(defaultLabelColor);
     }
@@ -544,6 +581,9 @@ export default function HomeScreen() {
     setPersonName(person.name);
     setPersonDescription(person.description);
     setPersonLabelId(person.labelId);
+    setPersonLabelInput(labels.find((label) => label.id === person.labelId)?.name ?? '');
+    setIsPersonLabelTyping(false);
+    setIsLabelSuggestionsOpen(false);
     setEditor({ kind: 'person', id: person.id });
   }
 
@@ -569,19 +609,36 @@ export default function HomeScreen() {
     setPersonName('');
     setPersonDescription('');
     setPersonLabelId(null);
+    setPersonLabelInput('');
+    setIsPersonLabelTyping(false);
+    setIsLabelSuggestionsOpen(false);
     setLabelName('');
     setLabelColor(defaultLabelColor);
+  }
+
+  /** Returns to person details before dismissing the editor on system back. */
+  function handleEditorRequestClose() {
+    if (editor?.kind === 'person' && isLabelPickerOpen) {
+      setIsLabelPickerOpen(false);
+      return;
+    }
+    closeEditor();
   }
 
   /** Logs a save problem and shows a clear message without changing the screen. */
   function showMutationError(action: string, error: unknown) {
     console.error(`Could not ${action}`, error);
-    const message = `NameKeep couldn’t ${action}. Your saved data has not been changed.`;
-    if (Platform.OS === 'web') {
-      globalThis.alert(message);
-      return;
+    showError(error, `NameKeep couldn’t ${action}. Your saved data has not been changed.`);
+  }
+
+  /** Keeps a successful data change visible if reminder cleanup fails afterward. */
+  async function cancelRemindersAfterSave(personIds: string[], context: string) {
+    try {
+      await cancelMemoryRemindersForPeople(personIds);
+    } catch (error) {
+      console.error('Could not cancel pending memory reminders', error);
+      showError(error, context);
     }
-    Alert.alert('Couldn’t save changes', message);
   }
 
   /** Saves a setting first, then updates the screen after it succeeds. */
@@ -655,16 +712,20 @@ export default function HomeScreen() {
     interval: MemoryReminderInterval,
     enabled: boolean,
   ) {
-    if (
-      Platform.OS !== 'web' &&
-      enabled &&
-      !(await requestMemoryReminderPermission())
-    ) {
-      Alert.alert(
-        'Notifications are off',
-        'Allow notifications for NameKeep in your device settings to use memory reminders.',
-      );
-      return;
+    if (Platform.OS !== 'web' && enabled) {
+      try {
+        if (!(await requestMemoryReminderPermission())) {
+          Alert.alert(
+            'Notifications are off',
+            'Allow notifications for NameKeep in your device settings to use memory reminders.',
+          );
+          return;
+        }
+      } catch (error) {
+        console.error('Could not request memory reminder permission', error);
+        showError(error, 'NameKeep could not check notification permission.');
+        return;
+      }
     }
 
     const nextIntervals = enabled
@@ -714,26 +775,43 @@ export default function HomeScreen() {
           console.error('Could not refresh reminders after editing a person', error);
           const message =
             'Your changes were saved, but NameKeep couldn\’t update this person\’s pending reminders. They may still show older details.';
-          if (Platform.OS === 'web') {
-            globalThis.alert(message);
-          } else {
-            Alert.alert('Reminders not updated', message);
-          }
+          showError(error, message);
         }
       } else {
         const createdAt = Date.now();
-        const person: Person = {
+        const personInput = {
           id: `person-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
-          ...updates,
+          name: updates.name,
+          description: updates.description,
           createdAt,
         };
-        await createPersonRecord(db, person);
+        const saved = await createPersonWithLabel(db, {
+          person: personInput,
+          label: isPersonLabelTyping
+            ? { kind: 'typed', name: personLabelInput }
+            : { kind: 'existing', id: personLabelId },
+          defaultLabelColor,
+        });
+        const person: Person = saved.person;
+        if (saved.createdLabel) {
+          const createdLabel = saved.createdLabel;
+          setLabels((current) => [...current, createdLabel]);
+        }
         setPeople((current) => [...current, person]);
-        await scheduleMemoryReminders(
-          person,
-          memoryReminderIntervals,
-          labels.find((label) => label.id === person.labelId)?.name ?? null,
-        );
+        closeEditor();
+        try {
+          await scheduleMemoryReminders(
+            person,
+            memoryReminderIntervals,
+            saved.label?.name ?? null,
+          );
+        } catch (error) {
+          console.error('Could not schedule reminders after adding a person', error);
+          const message =
+            'This person was saved, but NameKeep couldn’t schedule their memory reminders.';
+          showError(error, message);
+        }
+        return;
       }
       closeEditor();
     } catch (error) {
@@ -744,11 +822,31 @@ export default function HomeScreen() {
   }
 
   /** Checks and saves the label currently open in the editor. */
-  async function saveLabel() {
+  async function saveLabel(confirmedDuplicate = false) {
     if (isEditorSaving) return;
 
     const trimmedName = labelName.trim();
     if (editor?.kind === 'label' && !trimmedName) {
+      return;
+    }
+
+    if (
+      editor?.kind === 'label' &&
+      !editor.id &&
+      !confirmedDuplicate &&
+      labels.some(
+        (label) => normalizeLabelName(label.name) === normalizeLabelName(trimmedName),
+      )
+    ) {
+      const message = `A label named “${trimmedName}” already exists. Create a duplicate?`;
+      if (Platform.OS === 'web') {
+        if (globalThis.confirm(message)) void saveLabel(true);
+      } else {
+        Alert.alert('Label already exists', message, [
+          { text: 'No', style: 'cancel' },
+          { text: 'Create duplicate', onPress: () => void saveLabel(true) },
+        ]);
+      }
       return;
     }
 
@@ -775,6 +873,7 @@ export default function HomeScreen() {
           await refreshPendingReminders(
             people.filter((person) => person.labelId === labelId),
             trimmedName,
+            (error) => showError(error, 'The label was saved, but some pending reminders could not be updated.'),
           );
         }
       } else {
@@ -831,7 +930,10 @@ export default function HomeScreen() {
       try {
         const moved = await movePersonToTrash(db, id, deletedAt);
         if (!moved) throw new Error(`Person ${id} was not found.`);
-        await cancelMemoryRemindersForPeople([id]);
+        await cancelRemindersAfterSave(
+          [id],
+          'This person was moved to Trash, but pending reminders could not be cancelled.',
+        );
         setTrash((currentTrash) => [
           { ...deletedPerson, deletedAt },
           ...currentTrash,
@@ -914,8 +1016,9 @@ export default function HomeScreen() {
       );
 
       if (deletedPeople.length > 0) {
-        await cancelMemoryRemindersForPeople(
+        await cancelRemindersAfterSave(
           deletedPeople.map((person) => person.id),
+          'The label was deleted, but some pending reminders could not be cancelled.',
         );
         setTrash((currentTrash) => [
           ...deletedPeople.map((person) => ({ ...person, deletedAt })),
@@ -942,6 +1045,7 @@ export default function HomeScreen() {
             .filter((person) => person.labelId === deletedLabelId)
             .map((person) => ({ ...person, labelId: deleteDestinationLabelId })),
           labels.find((label) => label.id === deleteDestinationLabelId)?.name ?? null,
+          (error) => showError(error, 'The label was deleted, but some pending reminders could not be updated.'),
         );
       }
       setCollapsedLabelIds((current) => {
@@ -988,7 +1092,10 @@ export default function HomeScreen() {
       });
 
       if (movePeopleToTrash && peopleToHandle.length > 0) {
-        await cancelMemoryRemindersForPeople(peopleToHandle.map((person) => person.id));
+        await cancelRemindersAfterSave(
+          peopleToHandle.map((person) => person.id),
+          'People were moved to Trash, but some pending reminders could not be cancelled.',
+        );
         setTrash((currentTrash) => [
           ...peopleToHandle.map((person) => ({ ...person, deletedAt })),
           ...currentTrash,
@@ -1012,6 +1119,7 @@ export default function HomeScreen() {
             labelId: deleteDestinationLabelId,
           })),
           labels.find((label) => label.id === deleteDestinationLabelId)?.name ?? null,
+          (error) => showError(error, 'People were moved, but some pending reminders could not be updated.'),
         );
       }
       setCollapsedLabelIds((current) => {
@@ -1572,7 +1680,7 @@ export default function HomeScreen() {
 
       <Modal
         animationType="fade"
-        onRequestClose={closeEditor}
+        onRequestClose={handleEditorRequestClose}
         presentationStyle="overFullScreen"
         transparent
         visible={editor !== null}>
@@ -1663,18 +1771,21 @@ export default function HomeScreen() {
                     style={styles.labelPickerList}>
                     <Pressable
                       accessibilityRole="radio"
-                      accessibilityState={{ checked: personLabelId === null }}
+                      accessibilityState={{ checked: !isPersonLabelTyping && personLabelId === null }}
                       onPress={() => {
                         setPersonLabelId(null);
+                        setPersonLabelInput('');
+                        setIsPersonLabelTyping(false);
+                        setIsLabelSuggestionsOpen(false);
                         setIsLabelPickerOpen(false);
                       }}
                       style={({ pressed }) => [
                         styles.labelOption,
-                        personLabelId === null && styles.labelOptionSelected,
+                        !isPersonLabelTyping && personLabelId === null && styles.labelOptionSelected,
                         pressed && styles.labelOptionPressed,
                       ]}>
                       <Text style={styles.labelOptionText}>No Label</Text>
-                      {personLabelId === null && (
+                      {!isPersonLabelTyping && personLabelId === null && (
                         <SymbolView
                           name={{ ios: 'checkmark', android: 'check', web: 'check' }}
                           size={17}
@@ -1686,19 +1797,22 @@ export default function HomeScreen() {
                     {newestLabels.map((label) => (
                       <Pressable
                         accessibilityRole="radio"
-                        accessibilityState={{ checked: personLabelId === label.id }}
+                        accessibilityState={{ checked: !isPersonLabelTyping && personLabelId === label.id }}
                         key={label.id}
                         onPress={() => {
                           setPersonLabelId(label.id);
+                          setPersonLabelInput(label.name);
+                          setIsPersonLabelTyping(false);
+                          setIsLabelSuggestionsOpen(false);
                           setIsLabelPickerOpen(false);
                         }}
                         style={({ pressed }) => [
                           styles.labelOption,
-                          personLabelId === label.id && styles.labelOptionSelected,
+                          !isPersonLabelTyping && personLabelId === label.id && styles.labelOptionSelected,
                           pressed && styles.labelOptionPressed,
                         ]}>
                         <Text style={styles.labelOptionText}>{label.name}</Text>
-                        {personLabelId === label.id && (
+                        {!isPersonLabelTyping && personLabelId === label.id && (
                           <SymbolView
                             name={{ ios: 'checkmark', android: 'check', web: 'check' }}
                             size={17}
@@ -1710,7 +1824,10 @@ export default function HomeScreen() {
                   </ScrollView>
                 </View>
               ) : editor?.kind === 'person' ? (
-                <>
+                <ScrollView
+                  keyboardShouldPersistTaps="always"
+                  showsVerticalScrollIndicator={false}
+                  style={styles.personEditorContent}>
                   <View style={styles.fieldGroup}>
                     <View style={styles.fieldLabelRow}>
                       <Text style={styles.fieldLabel}>Name</Text>
@@ -1722,6 +1839,7 @@ export default function HomeScreen() {
                       autoCapitalize="words"
                       maxLength={NAME_MAX_LENGTH}
                       onChangeText={setPersonName}
+                      onFocus={() => setIsLabelSuggestionsOpen(false)}
                       placeholder="Their name (if you know it)"
                       placeholderTextColor={theme.textFaint}
                       selectionColor={theme.accent}
@@ -1742,6 +1860,7 @@ export default function HomeScreen() {
                       multiline
                       numberOfLines={2}
                       onChangeText={setPersonDescription}
+                      onFocus={() => setIsLabelSuggestionsOpen(false)}
                       placeholder="Where you met, what they look like, or anything memorable"
                       placeholderTextColor={theme.textFaint}
                       selectionColor={theme.accent}
@@ -1753,30 +1872,107 @@ export default function HomeScreen() {
 
                   <View style={styles.fieldGroup}>
                     <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>Label</Text>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityState={{ expanded: false }}
-                      onPress={() => {
-                        Keyboard.dismiss();
-                        setIsLabelPickerOpen(true);
-                      }}
-                      style={({ pressed }) => [
-                        styles.labelSelect,
-                        pressed && styles.labelSelectPressed,
-                      ]}>
-                      <Text style={styles.labelSelectText}>{selectedLabelName}</Text>
-                      <SymbolView
-                        name={{
-                          ios: 'chevron.down',
-                          android: 'keyboard_arrow_down',
-                          web: 'keyboard_arrow_down',
+                    {editor.id ? (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: false }}
+                        onPress={() => {
+                          Keyboard.dismiss();
+                          setIsLabelPickerOpen(true);
                         }}
-                        size={18}
-                        tintColor={theme.textMuted}
-                      />
-                    </Pressable>
+                        style={({ pressed }) => [
+                          styles.labelSelect,
+                          pressed && styles.labelSelectPressed,
+                        ]}>
+                        <Text style={styles.labelSelectText}>{selectedLabelName}</Text>
+                        <SymbolView
+                          name={{
+                            ios: 'chevron.down',
+                            android: 'keyboard_arrow_down',
+                            web: 'keyboard_arrow_down',
+                          }}
+                          size={18}
+                          tintColor={theme.textMuted}
+                        />
+                      </Pressable>
+                    ) : (
+                      <>
+                        <View style={styles.labelInputRow}>
+                          <TextInput
+                            accessibilityLabel="Search or create a label"
+                            autoCapitalize="words"
+                            maxLength={LABEL_MAX_LENGTH}
+                            onChangeText={(value) => {
+                              setPersonLabelInput(value);
+                              setPersonLabelId(null);
+                              setIsPersonLabelTyping(true);
+                              setIsLabelSuggestionsOpen(true);
+                            }}
+                            onFocus={() => setIsLabelSuggestionsOpen(true)}
+                            onSubmitEditing={() => setIsLabelSuggestionsOpen(false)}
+                            placeholder="No Label, or type a label"
+                            placeholderTextColor={theme.textFaint}
+                            returnKeyType="done"
+                            selectTextOnFocus={personLabelId !== null}
+                            selectionColor={theme.accent}
+                            style={styles.labelTextInput}
+                            value={personLabelInput}
+                          />
+                          <Pressable
+                            accessibilityLabel="Browse all labels"
+                            accessibilityRole="button"
+                            onPress={() => {
+                              Keyboard.dismiss();
+                              setIsLabelSuggestionsOpen(false);
+                              setIsLabelPickerOpen(true);
+                            }}
+                            style={({ pressed }) => [
+                              styles.labelBrowseButton,
+                              pressed && styles.labelSelectPressed,
+                            ]}>
+                            <SymbolView
+                              name={{
+                                ios: 'chevron.down',
+                                android: 'keyboard_arrow_down',
+                                web: 'keyboard_arrow_down',
+                              }}
+                              size={18}
+                              tintColor={theme.textMuted}
+                            />
+                          </Pressable>
+                        </View>
+                        {isLabelSuggestionsOpen && labelSuggestions.length > 0 && (
+                          <View style={styles.labelSuggestions}>
+                            {labelSuggestions.map((label) => (
+                              <Pressable
+                                accessibilityLabel={`Select ${label.name} label`}
+                                accessibilityRole="button"
+                                key={label.id}
+                                onPress={() => {
+                                  setPersonLabelId(label.id);
+                                  setPersonLabelInput(label.name);
+                                  setIsPersonLabelTyping(false);
+                                  setIsLabelSuggestionsOpen(false);
+                                  Keyboard.dismiss();
+                                }}
+                                style={({ pressed }) => [
+                                  styles.labelOption,
+                                  pressed && styles.labelOptionPressed,
+                                ]}>
+                                <Text style={styles.labelOptionText}>{label.name}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
+                        {willCreateLabel && (
+                          <Text style={styles.newLabelHint}>
+                            New label: {newLabelName}
+                          </Text>
+                        )}
+                      </>
+                    )}
                   </View>
-                </>
+                </ScrollView>
               ) : (
                 <View style={styles.fieldGroup}>
                   {editor?.kind === 'noLabel' ? (
@@ -1796,7 +1992,7 @@ export default function HomeScreen() {
                         autoFocus
                         maxLength={LABEL_MAX_LENGTH}
                         onChangeText={setLabelName}
-                        onSubmitEditing={saveLabel}
+                        onSubmitEditing={() => void saveLabel()}
                         placeholder="For example, Work or Biology"
                         placeholderTextColor={theme.textFaint}
                         returnKeyType="done"
@@ -1886,7 +2082,7 @@ export default function HomeScreen() {
                     isEditorSaving ||
                     (editor?.kind === 'label' && !labelName.trim())
                   }
-                  onPress={editor?.kind === 'person' ? savePerson : saveLabel}
+                  onPress={editor?.kind === 'person' ? savePerson : () => void saveLabel()}
                   style={({ pressed }) => [
                     styles.saveButton,
                     (editor?.id || editor?.kind === 'noLabel') &&
@@ -2827,6 +3023,10 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   labelPickerModalCard: {
     height: '86%',
   },
+  personEditorContent: {
+    flexShrink: 1,
+    minHeight: 0,
+  },
   bulkMoveDialog: {
     width: '100%',
     maxWidth: 480,
@@ -3001,6 +3201,47 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   labelSelectText: {
     color: theme.text,
     fontSize: 15,
+    fontWeight: '600',
+  },
+  labelInputRow: {
+    minHeight: 49,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  labelTextInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 47,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: theme.text,
+    fontSize: 15,
+  },
+  labelBrowseButton: {
+    width: 48,
+    minHeight: 47,
+    borderLeftWidth: 1,
+    borderLeftColor: theme.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  labelSuggestions: {
+    marginTop: 6,
+    borderRadius: CONTROL_CORNER_RADIUS,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.surface,
+    overflow: 'hidden',
+  },
+  newLabelHint: {
+    marginTop: 8,
+    color: theme.textSecondary,
+    fontSize: 12,
     fontWeight: '600',
   },
   labelOptions: {

@@ -10,6 +10,7 @@ import {
   type LabelColor,
 } from '@/constants/label-colors';
 import type { Label, Person } from '@/database/types';
+import { normalizeLabelName } from '@/lib/label-names';
 
 export const MAX_CSV_FILE_SIZE = 2_000_000;
 const MAX_IMPORT_ROWS = 5_000;
@@ -61,7 +62,7 @@ function normalizeText(value: string | undefined): string {
 
 /** Makes text consistent for case-insensitive duplicate checks. */
 function normalizeForComparison(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase();
+  return normalizeLabelName(value);
 }
 
 /** Checks whether a value is one of the label colors this app supports. */

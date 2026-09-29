@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useErrorReporter } from '@/components/app-error-dialog';
 import {
   LABEL_COLOR_OPTIONS,
   LabelColors,
@@ -131,6 +132,7 @@ export function SettingsScreen({
   onBack,
 }: SettingsScreenProps) {
   const theme = useTheme();
+  const { showError } = useErrorReporter();
   const { colorScheme } = useAppTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const [picker, setPicker] = useState<Picker>(null);
@@ -178,7 +180,7 @@ export function SettingsScreen({
   function openSupport() {
     void Linking.openURL(SUPPORT_URL).catch((error) => {
       console.error('Could not open support page', error);
-      showMessage('Could not open Help', 'Please try again in a moment.');
+      showError(error, 'NameKeep could not open Help. Please try again in a moment.');
     });
   }
 
@@ -227,10 +229,7 @@ export function SettingsScreen({
       await exportPeopleCsv(createPeopleCsv(people, labels));
     } catch (error) {
       console.error('Could not export people', error);
-      Alert.alert(
-        'Export failed',
-        'NameKeep could not create the CSV file. Please try again.',
-      );
+      showError(error, 'NameKeep could not create the CSV file.');
     } finally {
       setIsExporting(false);
     }
@@ -319,10 +318,7 @@ export function SettingsScreen({
           );
         } catch (error) {
           console.error('Could not save imported people', error);
-          showMessage(
-            'Import failed',
-            'NameKeep could not save the imported people. Your existing data has not been changed.',
-          );
+          showError(error, 'NameKeep could not save the imported people. Your existing data has not been changed.');
         }
       };
 
@@ -336,12 +332,11 @@ export function SettingsScreen({
       }
     } catch (error) {
       console.error('Could not import people', error);
-      showMessage(
-        error instanceof CsvImportError ? 'Cannot import CSV' : 'Import failed',
-        error instanceof CsvImportError
-          ? error.message
-          : 'NameKeep could not read the CSV file. Please try again.',
-      );
+      if (error instanceof CsvImportError) {
+        showMessage('Cannot import CSV', error.message);
+      } else {
+        showError(error, 'NameKeep could not read the CSV file.');
+      }
     } finally {
       setIsImporting(false);
     }
