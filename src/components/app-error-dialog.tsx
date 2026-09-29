@@ -23,11 +23,45 @@ type ErrorReporter = {
 const ErrorReporterContext = createContext<ErrorReporter | null>(null);
 
 /** Keeps the original error available while showing a clear recovery message. */
-function formatError(error: unknown): string {
+export function formatError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || `${error.name}: ${error.message}`;
   }
   return String(error);
+}
+
+/** Presents the same recovery message in popups and error fallback screens. */
+export function AppErrorCard({
+  details,
+  context,
+  actionLabel,
+  onAction,
+}: ErrorNotice & { actionLabel: string; onAction: () => void }) {
+  const theme = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  return (
+    <View accessibilityViewIsModal style={styles.card}>
+      <Text style={styles.eyebrow}>NAMEKEEP ERROR</Text>
+      <Text style={styles.title}>Something went wrong</Text>
+      <Text style={styles.message}>
+        There was a problem. Please restart the app and try again.
+      </Text>
+      {context && <Text style={styles.context}>{context}</Text>}
+      <Text style={styles.detailsLabel}>Original error</Text>
+      <ScrollView style={styles.detailsBox}>
+        <Text selectable style={styles.detailsText}>
+          {details}
+        </Text>
+      </ScrollView>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onAction}
+        style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
+        <Text style={styles.buttonText}>{actionLabel}</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 /** Shows caught errors from anywhere under the app's root layout. */
@@ -56,28 +90,12 @@ export function AppErrorProvider({ children }: { children: ReactNode }) {
         visible={currentNotice !== undefined}>
         <View style={styles.backdrop}>
           {currentNotice && (
-            <View accessibilityViewIsModal style={styles.card}>
-              <Text style={styles.eyebrow}>NAMEKEEP ERROR</Text>
-              <Text style={styles.title}>Something went wrong</Text>
-              <Text style={styles.message}>
-                There was a problem. Please restart the app and try again.
-              </Text>
-              {currentNotice.context && (
-                <Text style={styles.context}>{currentNotice.context}</Text>
-              )}
-              <Text style={styles.detailsLabel}>Original error</Text>
-              <ScrollView style={styles.detailsBox}>
-                <Text selectable style={styles.detailsText}>
-                  {currentNotice.details}
-                </Text>
-              </ScrollView>
-              <Pressable
-                accessibilityRole="button"
-                onPress={dismissError}
-                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed]}>
-                <Text style={styles.buttonText}>OK</Text>
-              </Pressable>
-            </View>
+            <AppErrorCard
+              actionLabel="OK"
+              context={currentNotice.context}
+              details={currentNotice.details}
+              onAction={dismissError}
+            />
           )}
         </View>
       </Modal>

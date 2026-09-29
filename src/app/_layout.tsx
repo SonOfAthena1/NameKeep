@@ -13,6 +13,7 @@ import { useEffect, useLayoutEffect, useMemo } from 'react';
 import { Platform } from 'react-native';
 
 import { AppErrorProvider, useErrorReporter } from '@/components/app-error-dialog';
+import { AppErrorBoundary, ScreenErrorBoundary } from '@/components/app-error-recovery';
 import { Colors } from '@/constants/theme';
 import { migrateDatabase } from '@/database/migrate';
 import { AppThemeProvider, useAppTheme } from '@/hooks/use-theme';
@@ -37,9 +38,11 @@ if (Platform.OS !== 'web') {
 export default function RootLayout() {
   return (
     <AppThemeProvider>
-      <AppErrorProvider>
-        <RootNavigator />
-      </AppErrorProvider>
+      <AppErrorBoundary>
+        <AppErrorProvider>
+          <RootNavigator />
+        </AppErrorProvider>
+      </AppErrorBoundary>
     </AppThemeProvider>
   );
 }
@@ -100,7 +103,10 @@ function RootNavigator() {
   return (
     <ThemeProvider value={navigationTheme}>
       <SQLiteProvider databaseName="namekeep.db" onInit={migrateDatabase}>
-        <Stack screenOptions={{ headerShown: false }} />
+        <Stack
+          screenOptions={{ headerShown: false }}
+          unstable_screenErrorBoundary={ScreenErrorBoundary}
+        />
         <NotificationNavigationReadiness
           notificationCoordinator={notificationCoordinator}
         />
