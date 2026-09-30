@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Linking from 'expo-linking';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   BackHandler,
@@ -139,10 +139,12 @@ export function SettingsScreen({
   const [showTrash, setShowTrash] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const importInProgress = useRef(false);
   const [isImportGuideOpen, setIsImportGuideOpen] = useState(false);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (importInProgress.current) return true;
       if (showTrash) {
         setShowTrash(false);
       } else {
@@ -246,8 +248,9 @@ export function SettingsScreen({
 
   /** Reads a selected CSV, checks it, and asks the app to save the result. */
   async function importPeople() {
-    if (isImporting) return;
+    if (importInProgress.current) return;
 
+    importInProgress.current = true;
     setIsImporting(true);
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -322,14 +325,19 @@ export function SettingsScreen({
         }
       };
 
-      if (Platform.OS === 'web') {
-        if (globalThis.confirm(summary)) await performImport();
-      } else {
-        Alert.alert('Review import', summary, [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Import', onPress: () => void performImport() },
-        ]);
-      }
+      // Await the native dialog so finally cannot unlock a pending import.
+      const confirmed = Platform.OS === 'web'
+        ? globalThis.confirm(summary)
+        : await new Promise<boolean>((resolve) => {
+            Alert.alert('Review import', summary, [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Import', onPress: () => resolve(true) },
+            ], {
+              cancelable: true,
+              onDismiss: () => resolve(false),
+            });
+          });
+      if (confirmed) await performImport();
     } catch (error) {
       console.error('Could not import people', error);
       if (error instanceof CsvImportError) {
@@ -338,6 +346,7 @@ export function SettingsScreen({
         showError(error, 'NameKeep could not read the CSV file.');
       }
     } finally {
+      importInProgress.current = false;
       setIsImporting(false);
     }
   }
@@ -403,7 +412,9 @@ export function SettingsScreen({
 
   return (
     <ScreenFrame styles={styles}>
-      <SettingsHeader title="Settings" onBack={onBack} styles={styles} theme={theme} />
+      <SettingsHeader title="Settings" onBack={() => {
+        if (!importInProgress.current) onBack();
+      }} styles={styles} theme={theme} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Section title="APPEARANCE" styles={styles}>
           <SettingRow title="App theme" value={themeName} onPress={() => togglePicker('theme')} expanded={picker === 'theme'} styles={styles} theme={theme} />
@@ -510,7 +521,7 @@ export function SettingsScreen({
         <Section title="DATA" styles={styles}>
           <SettingRow title="Export people" subtitle="Choose where to save or share a CSV file" value={isExporting ? 'Preparing…' : undefined} disabled={isExporting} onPress={exportPeople} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.up', android: 'upload_file', web: 'upload_file' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
-          <SettingRow title="Import people" subtitle="Add people and labels from a CSV file" value={isImporting ? 'Reading…' : undefined} disabled={isImporting} onPress={() => setIsImportGuideOpen(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }} size={20} tintColor={theme.accent} />} />
+          <SettingRow title="Import people" subtitle="Add people and labels from a CSV file" value={isImporting ? 'Importing…' : undefined} disabled={isImporting} onPress={() => setIsImportGuideOpen(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'square.and.arrow.down', android: 'download', web: 'download' }} size={20} tintColor={theme.accent} />} />
           <View style={styles.rowDivider} />
           <SettingRow title="Trash" subtitle="View, restore, or permanently delete people" value={trash.length ? String(trash.length) : undefined} onPress={() => setShowTrash(true)} styles={styles} theme={theme} leading={<SymbolView name={{ ios: 'trash', android: 'delete', web: 'delete' }} size={20} tintColor={theme.danger} />} />
         </Section>
