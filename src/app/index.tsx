@@ -219,6 +219,7 @@ export default function HomeScreen() {
   const [databaseLoadError, setDatabaseLoadError] = useState<string | null>(null);
   const [databaseLoadAttempt, setDatabaseLoadAttempt] = useState(0);
   const [isEditorSaving, setIsEditorSaving] = useState(false);
+  const [editorSaveError, setEditorSaveError] = useState<string | null>(null);
   const [isLabelDeleting, setIsLabelDeleting] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedPersonIds, setSelectedPersonIds] = useState<Set<string>>(
@@ -605,6 +606,7 @@ export default function HomeScreen() {
   /** Closes the editor and clears its temporary choices. */
   function closeEditor() {
     setEditor(null);
+    setEditorSaveError(null);
     setIsLabelPickerOpen(false);
     setPersonName('');
     setPersonDescription('');
@@ -629,6 +631,14 @@ export default function HomeScreen() {
   function showMutationError(action: string, error: unknown) {
     console.error(`Could not ${action}`, error);
     showError(error, `NameKeep couldn’t ${action}. Your saved data has not been changed.`);
+  }
+
+  /** Reports a failed editor save without presenting another native modal. */
+  function showEditorSaveError(action: string, error: unknown) {
+    console.error(`Could not ${action}`, error);
+    setEditorSaveError(
+      `NameKeep couldn’t ${action}. Your changes are still here. Please try again.`,
+    );
   }
 
   /** Keeps a successful data change visible if reminder cleanup fails afterward. */
@@ -740,6 +750,7 @@ export default function HomeScreen() {
   /** Checks and saves the person currently open in the editor. */
   async function savePerson() {
     if (isEditorSaving) return;
+    setEditorSaveError(null);
 
     const updates = {
       name: personName.trim() || getRandomUnnamedPersonName(),
@@ -775,7 +786,8 @@ export default function HomeScreen() {
           console.error('Could not refresh reminders after editing a person', error);
           const message =
             'Your changes were saved, but NameKeep couldn\’t update this person\’s pending reminders. They may still show older details.';
-          showError(error, message);
+          setEditorSaveError(message);
+          return;
         }
       } else {
         const createdAt = Date.now();
@@ -815,7 +827,7 @@ export default function HomeScreen() {
       }
       closeEditor();
     } catch (error) {
-      showMutationError('save this person', error);
+      showEditorSaveError('save this person', error);
     } finally {
       setIsEditorSaving(false);
     }
@@ -850,6 +862,7 @@ export default function HomeScreen() {
       return;
     }
 
+    setEditorSaveError(null);
     setIsEditorSaving(true);
     try {
       if (editor?.kind === 'noLabel') {
@@ -870,11 +883,16 @@ export default function HomeScreen() {
           ),
         );
         if (labels.find((label) => label.id === labelId)?.name !== trimmedName) {
+          let reminderUpdateFailed = false;
           await refreshPendingReminders(
             people.filter((person) => person.labelId === labelId),
             trimmedName,
-            (error) => showError(error, 'The label was saved, but some pending reminders could not be updated.'),
+            () => {
+              reminderUpdateFailed = true;
+              setEditorSaveError('The label was saved, but some pending reminders could not be updated.');
+            },
           );
+          if (reminderUpdateFailed) return;
         }
       } else {
         const createdAt = Date.now();
@@ -889,7 +907,7 @@ export default function HomeScreen() {
       }
       closeEditor();
     } catch (error) {
-      showMutationError('save this label', error);
+      showEditorSaveError('save this label', error);
     } finally {
       setIsEditorSaving(false);
     }
@@ -1761,6 +1779,12 @@ export default function HomeScreen() {
                   />
                 </Pressable>
               </View>
+
+              {editorSaveError && !isLabelPickerOpen && (
+                <View accessibilityRole="alert" style={styles.editorSaveError}>
+                  <Text style={styles.editorSaveErrorText}>{editorSaveError}</Text>
+                </View>
+              )}
 
               {editor?.kind === 'person' && isLabelPickerOpen ? (
                 <View style={styles.labelPickerContent}>
@@ -3113,6 +3137,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   modalCloseButtonPressed: {
     backgroundColor: theme.backgroundSelected,
+  },
+  editorSaveError: {
+    borderWidth: 1,
+    borderColor: theme.danger,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  editorSaveErrorText: {
+    color: theme.danger,
+    fontSize: 14,
+    lineHeight: 20,
   },
   fieldGroup: {
     marginBottom: 17,
