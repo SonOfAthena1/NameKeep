@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -363,6 +364,15 @@ export default function HomeScreen() {
 
     return labeledSections;
   }, [labelSortOrder, labels, noLabelColor, people, peopleSortOrder, search]);
+
+  const listSections = useMemo(
+    () => sections.map((section) => ({
+      ...section,
+      key: section.label.id,
+      data: collapsedLabelIds.has(section.label.id) ? [] : section.people,
+    })),
+    [sections, collapsedLabelIds],
+  );
 
   const newestLabels = useMemo(() => sortByOrder(labels, 'newest'), [labels]);
   const labelSuggestions = useMemo(() => {
@@ -1355,14 +1365,21 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <ScrollView
+        <SectionList
+          sections={listSections}
+          keyExtractor={(person) => person.id}
+          stickySectionHeadersEnabled={false}
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={7}
           contentContainerStyle={[
             styles.listContent,
             condensedView && styles.listContentCondensed,
           ]}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
           <View
             style={[
               styles.listHeadingRow,
@@ -1450,7 +1467,9 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {sections.map(({ label, people }) => {
+          }
+          renderSectionHeader={({ section }) => {
+            const { label, people } = section;
             const isCollapsed = collapsedLabelIds.has(label.id);
             const labelTheme = LabelColors[colorScheme][label.color];
 
@@ -1458,8 +1477,8 @@ export default function HomeScreen() {
               <View
                 key={label.id}
                 style={[
-                  styles.section,
-                  condensedView && styles.sectionCondensed,
+                  styles.sectionHeaderFrame,
+                  section.data.length === 0 && styles.sectionHeaderFrameClosed,
                   { borderColor: labelTheme.base },
                 ]}>
                 <View
@@ -1537,78 +1556,79 @@ export default function HomeScreen() {
                   </Pressable>
                 </View>
 
-                {!isCollapsed && people.length > 0 && (
-                  <View
-                    style={[
-                      styles.peopleList,
-                      condensedView && styles.peopleListCondensed,
-                    ]}>
-                    {people.map((person, index) => {
-                      const isSelected = selectedPersonIds.has(person.id);
-                      const rowStyle = [
-                        styles.personRow,
-                        condensedView && styles.personRowCondensed,
-                        index > 0 && !condensedView && styles.personDivider,
-                      ];
-
-                      if (isSelectionMode) {
-                        return (
-                          <Pressable
-                            key={person.id}
-                            accessibilityLabel={`Select ${person.name}`}
-                            accessibilityRole="checkbox"
-                            accessibilityState={{ checked: isSelected }}
-                            onPress={() => togglePersonSelection(person.id)}
-                            style={({ pressed }) => [
-                              rowStyle,
-                              styles.selectablePersonRow,
-                              isSelected && styles.selectablePersonRowSelected,
-                              pressed && styles.selectablePersonRowPressed,
-                            ]}>
-                            <View style={styles.personCopy}>
-                              <Text style={styles.personLine}>
-                                <Text style={[styles.personName, condensedView && styles.personNameCondensed]}>
-                                  {person.name || 'Unnamed person'}
-                                </Text>
-                                {!!person.description && <Text style={styles.personDescription}> — {person.description}</Text>}
-                                {showDate && <Text style={styles.personDate}> ({formatShortDate(person.createdAt)})</Text>}
-                              </Text>
-                            </View>
-                            <View style={[styles.personCheckbox, isSelected && styles.personCheckboxSelected]}>
-                              {isSelected && <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={15} tintColor={theme.background} />}
-                            </View>
-                          </Pressable>
-                        );
-                      }
-
-                      return (
-                        <View key={person.id} style={rowStyle}>
-                          <View style={styles.personCopy}>
-                            <Text style={styles.personLine}>
-                              <Text style={[styles.personName, condensedView && styles.personNameCondensed]}>
-                                {person.name || 'Unnamed person'}
-                              </Text>
-                              {!!person.description && <Text style={styles.personDescription}> — {person.description}</Text>}
-                              {showDate && <Text style={styles.personDate}> ({formatShortDate(person.createdAt)})</Text>}
-                            </Text>
-                          </View>
-                          <Pressable
-                            accessibilityLabel={`Edit ${person.name || 'unnamed person'}`}
-                            accessibilityRole="button"
-                            hitSlop={10}
-                            onPress={() => openPersonEditor(person)}
-                            style={({ pressed }) => [styles.personEditButton, pressed && styles.editButtonPressed]}>
-                            <SymbolView name={{ ios: 'pencil', android: 'edit', web: 'edit' }} size={18} tintColor={theme.textMuted} />
-                          </Pressable>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
               </View>
             );
-          })}
+          }}
+          renderItem={({ item: person, index, section }) => {
+            const isSelected = selectedPersonIds.has(person.id);
+            const rowStyle = [
+              styles.personRow,
+              condensedView && styles.personRowCondensed,
+              index > 0 && !condensedView && styles.personDivider,
+            ];
 
+            const row = isSelectionMode ? (
+                <Pressable
+                  key={person.id}
+                  accessibilityLabel={`Select ${person.name}`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isSelected }}
+                  onPress={() => togglePersonSelection(person.id)}
+                  style={({ pressed }) => [
+                    rowStyle,
+                    styles.selectablePersonRow,
+                    isSelected && styles.selectablePersonRowSelected,
+                    pressed && styles.selectablePersonRowPressed,
+                  ]}>
+                  <View style={styles.personCopy}>
+                    <Text style={styles.personLine}>
+                      <Text style={[styles.personName, condensedView && styles.personNameCondensed]}>
+                        {person.name || 'Unnamed person'}
+                      </Text>
+                      {!!person.description && <Text style={styles.personDescription}> — {person.description}</Text>}
+                      {showDate && <Text style={styles.personDate}> ({formatShortDate(person.createdAt)})</Text>}
+                    </Text>
+                  </View>
+                  <View style={[styles.personCheckbox, isSelected && styles.personCheckboxSelected]}>
+                    {isSelected && <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={15} tintColor={theme.background} />}
+                  </View>
+                </Pressable>
+              ) : (
+              <View key={person.id} style={rowStyle}>
+                <View style={styles.personCopy}>
+                  <Text style={styles.personLine}>
+                    <Text style={[styles.personName, condensedView && styles.personNameCondensed]}>
+                      {person.name || 'Unnamed person'}
+                    </Text>
+                    {!!person.description && <Text style={styles.personDescription}> — {person.description}</Text>}
+                    {showDate && <Text style={styles.personDate}> ({formatShortDate(person.createdAt)})</Text>}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel={`Edit ${person.name || 'unnamed person'}`}
+                  accessibilityRole="button"
+                  hitSlop={10}
+                  onPress={() => openPersonEditor(person)}
+                  style={({ pressed }) => [styles.personEditButton, pressed && styles.editButtonPressed]}>
+                  <SymbolView name={{ ios: 'pencil', android: 'edit', web: 'edit' }} size={18} tintColor={theme.textMuted} />
+                </Pressable>
+              </View>
+            );
+            return (
+              <View style={[
+                styles.peopleList,
+                { borderColor: LabelColors[colorScheme][section.label.color].base },
+                index === section.data.length - 1 && styles.peopleListLast,
+                index === section.data.length - 1 && condensedView && styles.peopleListLastCondensed,
+              ]}>
+                {row}
+              </View>
+            );
+          }}
+          renderSectionFooter={() => (
+            <View style={condensedView ? styles.sectionGapCondensed : styles.sectionGap} />
+          )}
+          ListFooterComponent={<>
           {people.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>Go meet people!</Text>
@@ -1624,7 +1644,8 @@ export default function HomeScreen() {
               <Text style={styles.emptyText}>Try a different name or detail.</Text>
             </View>
           )}
-        </ScrollView>
+          </>}
+        />
 
         {isSelectionMode ? (
           <View style={styles.bulkActionBar}>
@@ -2704,17 +2725,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  section: {
-    borderRadius: CONTROL_CORNER_RADIUS,
+  sectionHeaderFrame: {
+    borderTopLeftRadius: CONTROL_CORNER_RADIUS,
+    borderTopRightRadius: CONTROL_CORNER_RADIUS,
     borderWidth: 1,
     borderColor: theme.accent,
     backgroundColor: theme.surface,
-    marginBottom: 13,
     overflow: 'hidden',
   },
-  sectionCondensed: {
-    marginBottom: 8,
+  sectionHeaderFrameClosed: {
+    borderBottomLeftRadius: CONTROL_CORNER_RADIUS,
+    borderBottomRightRadius: CONTROL_CORNER_RADIUS,
   },
+  sectionGap: { height: 13 },
+  sectionGapCondensed: { height: 8 },
   sectionHeader: {
     minHeight: 43,
     flexDirection: 'row',
@@ -2784,10 +2808,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   peopleList: {
     paddingHorizontal: 15,
-    paddingBottom: 4,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
     backgroundColor: theme.surface,
   },
-  peopleListCondensed: {
+  peopleListLast: {
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomLeftRadius: CONTROL_CORNER_RADIUS,
+    borderBottomRightRadius: CONTROL_CORNER_RADIUS,
+    overflow: 'hidden',
+  },
+  peopleListLastCondensed: {
     paddingBottom: 2,
   },
   personRow: {
