@@ -17,7 +17,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useErrorReporter } from '@/components/app-error-dialog';
 import {
@@ -232,7 +232,8 @@ export default function HomeScreen() {
   const theme = useTheme();
   const { showError } = useErrorReporter();
   const { colorScheme, themePreference, setThemePreference } = useAppTheme();
-  const styles = useMemo(() => createStyles(theme), [theme]);
+  const { bottom: bottomInset } = useSafeAreaInsets();
+  const styles = useMemo(() => createStyles(theme, bottomInset), [theme, bottomInset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2440,8 +2441,8 @@ export default function HomeScreen() {
   );
 }
 
-/** Creates the home screen's colors and layout for the active theme. */
-const createStyles = (theme: AppTheme) => StyleSheet.create({
+/** Creates the home screen's colors and keeps floating controls above system navigation. */
+const createStyles = (theme: AppTheme, bottomInset: number) => StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: theme.background,
@@ -2914,7 +2915,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   addButton: {
     position: 'absolute',
     right: 24,
-    bottom: 24,
+    bottom: bottomInset + 24,
     width: 60,
     height: 60,
     borderRadius: CONTROL_CORNER_RADIUS,
@@ -2955,7 +2956,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   addMenu: {
     position: 'absolute',
     right: 24,
-    bottom: 96,
+    bottom: bottomInset + 96,
     gap: 9,
     alignItems: 'flex-end',
   },
@@ -2989,7 +2990,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     position: 'absolute',
     left: 24,
     right: 24,
-    bottom: 24,
+    bottom: bottomInset + 24,
     minHeight: 60,
     padding: 8,
     borderRadius: CONTROL_CORNER_RADIUS,
