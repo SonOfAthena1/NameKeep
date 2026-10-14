@@ -40,7 +40,8 @@
       ],
       "expo-sqlite",
       "expo-notifications",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,
