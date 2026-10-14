@@ -41,7 +41,7 @@ describe('SQLite persistence', () => {
     const version = await testDatabase.getFirstAsync<{ user_version: number }>(
       'PRAGMA user_version',
     );
-    expect(version?.user_version).toBe(8);
+    expect(version?.user_version).toBe(9);
     await expect(getSettings(database)).resolves.toMatchObject({
       themePreference: 'light',
       defaultLabelColor: 'green',
@@ -131,6 +131,11 @@ describe('SQLite persistence', () => {
       await expect(restorePerson(database, id)).resolves.toMatchObject({
         person: { labelId: 'new-work' }, label: { id: 'new-work', color: 'blue' },
       });
+      const originalLabel = await database.getFirstAsync(
+        "SELECT id FROM labels WHERE id = 'old-work'",
+      );
+      if (id === 'one') expect(originalLabel).not.toBeNull();
+      else expect(originalLabel).toBeNull();
     }
     expect((await listActiveLabels(database)).map((label) => label.id)).toEqual(['new-work']);
     expect((await listActivePeople(database)).every((person) => person.labelId === 'new-work')).toBe(true);
@@ -287,6 +292,7 @@ describe('SQLite persistence', () => {
 
     expect((await getActivePerson(database, 'person'))?.labelId).toBe('destination');
     expect((await getSettings(database)).defaultLabelId).toBeNull();
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'source'")).toBeNull();
     expect((await listActiveLabels(database)).map((item) => item.id)).toEqual([
       'destination',
     ]);
@@ -348,6 +354,83 @@ describe('SQLite persistence', () => {
     expect(await listTrashedPeople(database)).toHaveLength(2);
     await expect(emptyTrash(database)).resolves.toBe(2);
     await expect(listTrashedPeople(database)).resolves.toEqual([]);
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'work'")).toBeNull();
+  });
+
+  test('removes an empty deleted label but keeps active empty labels', async () => {
+    for (const id of ['deleted', 'active']) {
+      await createLabel(database, { id, name: id, color: 'green' });
+    }
+    await deleteLabelAndHandlePeople(database, 'deleted', {
+      destinationLabelId: null,
+      movePeopleToTrash: false,
+    });
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'deleted'")).toBeNull();
+    await expect(emptyTrash(database)).resolves.toBe(0);
+    expect((await listActiveLabels(database)).map((label) => label.id)).toEqual(['active']);
+  });
+
+  test('keeps a deleted label until the last person in Trash is permanently deleted', async () => {
+    await createLabel(database, { id: 'work', name: 'Work', color: 'orange' });
+    await createLabel(database, { id: 'active', name: 'Active', color: 'blue' });
+    for (const id of ['one', 'two']) {
+      await createPerson(database, { id, name: id, description: '', labelId: 'work' });
+    }
+    await deleteLabelAndHandlePeople(database, 'work', {
+      destinationLabelId: null,
+      movePeopleToTrash: true,
+    });
+    await expect(deletePersonPermanently(database, 'one')).resolves.toBe(true);
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'work'")).not.toBeNull();
+    await expect(deletePersonPermanently(database, 'two')).resolves.toBe(true);
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'work'")).toBeNull();
+    expect((await listActiveLabels(database)).map((label) => label.id)).toEqual(['active']);
+    await expect(deletePersonPermanently(database, 'two')).resolves.toBe(false);
+  });
+
+  test('cleans up old unused labels during an upgrade while preserving all person references', async () => {
+    for (const id of ['unused', 'trashed', 'referenced', 'active']) {
+      await createLabel(database, { id, name: id, color: 'orange' });
+    }
+    await createPerson(database, { id: 'trash-person', name: 'Trash', description: '', labelId: 'trashed' });
+    await createPerson(database, { id: 'active-person', name: 'Active', description: '', labelId: 'referenced' });
+    await movePersonToTrash(database, 'trash-person');
+    // Reproduce the records and schema left by version 8, before cleanup existed.
+    await database.execAsync(`
+      UPDATE labels SET deleted_at = 40 WHERE id != 'active';
+      DROP INDEX people_label_id_idx;
+      PRAGMA user_version = 8;
+    `);
+
+    await migrateDatabase(database);
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'unused'")).toBeNull();
+    expect(await database.getAllAsync('SELECT id FROM labels ORDER BY id')).toEqual([
+      { id: 'active' }, { id: 'referenced' }, { id: 'trashed' },
+    ]);
+    expect(await database.getFirstAsync('PRAGMA user_version')).toEqual({ user_version: 9 });
+    expect(await database.getFirstAsync("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'people_label_id_idx'")).not.toBeNull();
+    await expect(restorePerson(database, 'trash-person')).resolves.toMatchObject({
+      person: { labelId: 'trashed' }, label: { id: 'trashed', color: 'orange' },
+    });
+    await expect(migrateDatabase(database)).resolves.toBeUndefined();
+  });
+
+  test.each(['person', 'all'])('rolls back permanent deletion of %s when label cleanup fails', async (scope) => {
+    await createLabel(database, { id: 'work', name: 'Work', color: 'orange' });
+    await createPerson(database, { id: 'ada', name: 'Ada', description: '', labelId: 'work' });
+    await deleteLabelAndHandlePeople(database, 'work', {
+      destinationLabelId: null,
+      movePeopleToTrash: true,
+    });
+    await database.execAsync(`
+      CREATE TRIGGER fail_cleanup BEFORE DELETE ON labels
+      BEGIN SELECT RAISE(ABORT, 'Cleanup failed'); END;
+    `);
+    await expect(scope === 'person'
+      ? deletePersonPermanently(database, 'ada')
+      : emptyTrash(database)).rejects.toThrow('Cleanup failed');
+    expect(await listTrashedPeople(database)).toMatchObject([{ id: 'ada', labelId: 'work' }]);
+    expect(await database.getFirstAsync("SELECT id FROM labels WHERE id = 'work'")).not.toBeNull();
   });
 
   test('saves settings and tolerates malformed reminder data', async () => {

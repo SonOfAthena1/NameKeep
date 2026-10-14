@@ -1,8 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { deleteUnusedDeletedLabels } from '@/database/labels-repository';
 import { withWriteTransaction } from '@/database/transactions';
 
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 9;
 
 /**
  * Brings an existing NameKeep database up to the version this app understands.
@@ -263,6 +264,14 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
             'orange', 'amber', 'teal', 'gray'
           ));
       `);
+    }
+
+    if (currentVersion < 9) {
+      // Include people in Trash in label-reference lookups used by cleanup.
+      await db.execAsync(`
+        CREATE INDEX people_label_id_idx ON people(label_id);
+      `);
+      await deleteUnusedDeletedLabels(db);
     }
 
     await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -1,6 +1,9 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { listActiveLabels } from '@/database/labels-repository';
+import {
+  deleteUnusedDeletedLabels,
+  listActiveLabels,
+} from '@/database/labels-repository';
 import { withWriteTransaction } from '@/database/transactions';
 import type {
   StoredLabel,
@@ -244,6 +247,7 @@ export async function restorePerson(
         WHERE id = $id AND deleted_at IS NOT NULL`,
       { $id: id, $labelId: label?.id ?? null, $restoredAt: restoredAt },
     );
+    await deleteUnusedDeletedLabels(transaction);
     result = {
       person: {
         ...mapPerson(row),
@@ -262,19 +266,29 @@ export async function deletePersonPermanently(
   db: SQLiteDatabase,
   id: string,
 ): Promise<boolean> {
-  const result = await db.runAsync(
-    `DELETE FROM people
-      WHERE id = $id
-        AND deleted_at IS NOT NULL`,
-    { $id: id },
-  );
-  return result.changes > 0;
+  let deleted = false;
+  await withWriteTransaction(db, async (transaction) => {
+    const result = await transaction.runAsync(
+      `DELETE FROM people
+        WHERE id = $id
+          AND deleted_at IS NOT NULL`,
+      { $id: id },
+    );
+    deleted = result.changes > 0;
+    await deleteUnusedDeletedLabels(transaction);
+  });
+  return deleted;
 }
 
 /** Permanently removes everyone in Trash and returns how many were removed. */
 export async function emptyTrash(db: SQLiteDatabase): Promise<number> {
-  const result = await db.runAsync(
-    'DELETE FROM people WHERE deleted_at IS NOT NULL',
-  );
-  return result.changes;
+  let deletedCount = 0;
+  await withWriteTransaction(db, async (transaction) => {
+    const result = await transaction.runAsync(
+      'DELETE FROM people WHERE deleted_at IS NOT NULL',
+    );
+    deletedCount = result.changes;
+    await deleteUnusedDeletedLabels(transaction);
+  });
+  return deletedCount;
 }

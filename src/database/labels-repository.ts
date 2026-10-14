@@ -127,6 +127,17 @@ export async function updateLabel(
   return result.changes > 0;
 }
 
+/** Removes deleted labels only when no person, including anyone in Trash, uses them. */
+export async function deleteUnusedDeletedLabels(db: SQLiteDatabase): Promise<void> {
+  await db.runAsync(`
+    DELETE FROM labels
+    WHERE deleted_at IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM people WHERE people.label_id = labels.id
+      )
+  `);
+}
+
 /**
  * Deletes a label and safely deals with every person using it.
  *
@@ -215,6 +226,7 @@ export async function deleteLabelAndHandlePeople(
     if (labelResult.changes === 0) {
       throw new Error(`Label ${id} was not found.`);
     }
+    await deleteUnusedDeletedLabels(db);
   });
 
   return { affectedPeople, deletedAt };
