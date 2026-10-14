@@ -410,6 +410,7 @@ export default function HomeScreen() {
   const peopleInDeleteDialog = isDeletingNoLabel
     ? peopleWithoutLabel.length
     : peopleInDeletedLabel;
+  const isDeletingEmptyLabel = !isDeletingNoLabel && peopleInDeleteDialog === 0;
   const areAllVisibleSectionsCollapsed =
     sections.length > 0 &&
     sections.every(({ label }) => collapsedLabelIds.has(label.id));
@@ -2202,7 +2203,9 @@ export default function HomeScreen() {
             </View>
 
             <Text style={styles.deleteModalDescription}>
-              {isDeletingNoLabel
+              {isDeletingEmptyLabel
+                ? `Are you sure you want to delete “${labelBeingDeleted?.name ?? 'label'}”?`
+                : isDeletingNoLabel
                 ? `This section contains ${peopleInDeleteDialog} ${
                     peopleInDeleteDialog === 1 ? 'person' : 'people'
                   }. Move them to a label or send them to Trash. The section returns whenever someone has no label.`
@@ -2211,89 +2214,64 @@ export default function HomeScreen() {
                   }. Choose whether to move them or delete them with the label.`}
             </Text>
 
-            <View style={styles.fieldGroup}>
-              <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>
-                Move people to
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{
-                  disabled: isLabelDeleting,
-                  expanded: isDeleteDestinationPickerOpen,
-                }}
-                disabled={isLabelDeleting}
-                onPress={() =>
-                  setIsDeleteDestinationPickerOpen((current) => !current)
-                }
-                style={({ pressed }) => [
-                  styles.labelSelect,
-                  pressed && styles.labelSelectPressed,
-                ]}>
-                <Text style={styles.labelSelectText}>
-                  {deleteDestinationLabelName}
+            {!isDeletingEmptyLabel && (
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.fieldLabel, styles.fieldLabelStandalone]}>
+                  Move people to
                 </Text>
-                <SymbolView
-                  name={{
-                    ios: 'chevron.down',
-                    android: 'keyboard_arrow_down',
-                    web: 'keyboard_arrow_down',
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    disabled: isLabelDeleting,
+                    expanded: isDeleteDestinationPickerOpen,
                   }}
-                  size={18}
-                  tintColor={theme.textMuted}
-                  style={{
-                    transform: [
-                      {
-                        rotate: isDeleteDestinationPickerOpen ? '180deg' : '0deg',
-                      },
-                    ],
-                  }}
-                />
-              </Pressable>
-              {isDeleteDestinationPickerOpen && (
-                <ScrollView
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={false}
-                  style={styles.labelOptions}>
-                  {!isDeletingNoLabel && (
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setDeleteDestinationLabelId(null);
-                        setIsDeleteDestinationPickerOpen(false);
-                      }}
-                      style={({ pressed }) => [
-                        styles.labelOption,
-                        deleteDestinationLabelId === null && styles.labelOptionSelected,
-                        pressed && styles.labelOptionPressed,
-                      ]}>
-                      <Text style={styles.labelOptionText}>No Label</Text>
-                      {deleteDestinationLabelId === null && (
-                        <SymbolView
-                          name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                          size={17}
-                          tintColor={theme.accent}
-                        />
-                      )}
-                    </Pressable>
-                  )}
-                  {labels
-                    .filter((label) => label.id !== labelDeleteId)
-                    .map((label) => (
+                  disabled={isLabelDeleting}
+                  onPress={() =>
+                    setIsDeleteDestinationPickerOpen((current) => !current)
+                  }
+                  style={({ pressed }) => [
+                    styles.labelSelect,
+                    pressed && styles.labelSelectPressed,
+                  ]}>
+                  <Text style={styles.labelSelectText}>
+                    {deleteDestinationLabelName}
+                  </Text>
+                  <SymbolView
+                    name={{
+                      ios: 'chevron.down',
+                      android: 'keyboard_arrow_down',
+                      web: 'keyboard_arrow_down',
+                    }}
+                    size={18}
+                    tintColor={theme.textMuted}
+                    style={{
+                      transform: [
+                        {
+                          rotate: isDeleteDestinationPickerOpen ? '180deg' : '0deg',
+                        },
+                      ],
+                    }}
+                  />
+                </Pressable>
+                {isDeleteDestinationPickerOpen && (
+                  <ScrollView
+                    nestedScrollEnabled
+                    showsVerticalScrollIndicator={false}
+                    style={styles.labelOptions}>
+                    {!isDeletingNoLabel && (
                       <Pressable
                         accessibilityRole="button"
-                        key={label.id}
                         onPress={() => {
-                          setDeleteDestinationLabelId(label.id);
+                          setDeleteDestinationLabelId(null);
                           setIsDeleteDestinationPickerOpen(false);
                         }}
                         style={({ pressed }) => [
                           styles.labelOption,
-                          deleteDestinationLabelId === label.id &&
-                            styles.labelOptionSelected,
+                          deleteDestinationLabelId === null && styles.labelOptionSelected,
                           pressed && styles.labelOptionPressed,
                         ]}>
-                        <Text style={styles.labelOptionText}>{label.name}</Text>
-                        {deleteDestinationLabelId === label.id && (
+                        <Text style={styles.labelOptionText}>No Label</Text>
+                        {deleteDestinationLabelId === null && (
                           <SymbolView
                             name={{ ios: 'checkmark', android: 'check', web: 'check' }}
                             size={17}
@@ -2301,45 +2279,74 @@ export default function HomeScreen() {
                           />
                         )}
                       </Pressable>
-                    ))}
-                </ScrollView>
-              )}
-            </View>
+                    )}
+                    {labels
+                      .filter((label) => label.id !== labelDeleteId)
+                      .map((label) => (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={label.id}
+                          onPress={() => {
+                            setDeleteDestinationLabelId(label.id);
+                            setIsDeleteDestinationPickerOpen(false);
+                          }}
+                          style={({ pressed }) => [
+                            styles.labelOption,
+                            deleteDestinationLabelId === label.id &&
+                              styles.labelOptionSelected,
+                            pressed && styles.labelOptionPressed,
+                          ]}>
+                          <Text style={styles.labelOptionText}>{label.name}</Text>
+                          {deleteDestinationLabelId === label.id && (
+                            <SymbolView
+                              name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                              size={17}
+                              tintColor={theme.accent}
+                            />
+                          )}
+                        </Pressable>
+                      ))}
+                  </ScrollView>
+                )}
+              </View>
+            )}
 
             <View style={styles.deleteDecisionActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{
-                  disabled:
+              {!isDeletingEmptyLabel && (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{
+                    disabled:
+                      isLabelDeleting ||
+                      (isDeletingNoLabel && deleteDestinationLabelId === null),
+                  }}
+                  disabled={
                     isLabelDeleting ||
-                    (isDeletingNoLabel && deleteDestinationLabelId === null),
-                }}
-                disabled={
-                  isLabelDeleting ||
-                  (isDeletingNoLabel && deleteDestinationLabelId === null)
-                }
-                onPress={() =>
-                  void (isDeletingNoLabel
-                    ? confirmNoLabelDeletion(false)
-                    : confirmLabelDeletion(false))
-                }
-                style={({ pressed }) => [
-                  styles.moveAndDeleteButton,
-                  pressed && styles.moveAndDeleteButtonPressed,
-                  isLabelDeleting && styles.saveButtonDisabled,
-                ]}>
-                <Text style={styles.moveAndDeleteButtonText}>
-                  {isLabelDeleting
-                    ? 'Deleting…'
-                    : isDeletingNoLabel
-                    ? `Move ${peopleInDeleteDialog} ${
-                        peopleInDeleteDialog === 1 ? 'person' : 'people'
-                      }`
-                    : `Move ${peopleInDeleteDialog} ${
-                        peopleInDeleteDialog === 1 ? 'person' : 'people'
-                      } & Delete Label`}
-                </Text>
-              </Pressable>
+                    (isDeletingNoLabel && deleteDestinationLabelId === null)
+                  }
+                  onPress={() =>
+                    void (isDeletingNoLabel
+                      ? confirmNoLabelDeletion(false)
+                      : confirmLabelDeletion(false))
+                  }
+                  style={({ pressed }) => [
+                    styles.moveAndDeleteButton,
+                    pressed && styles.moveAndDeleteButtonPressed,
+                    isLabelDeleting && styles.saveButtonDisabled,
+                  ]}>
+                  <Text style={styles.moveAndDeleteButtonText}>
+                    {isLabelDeleting
+                      ? 'Deleting…'
+                      : isDeletingNoLabel
+                      ? `Move ${peopleInDeleteDialog} ${
+                          peopleInDeleteDialog === 1 ? 'person' : 'people'
+                        }`
+                      : `Move ${peopleInDeleteDialog} ${
+                          peopleInDeleteDialog === 1 ? 'person' : 'people'
+                        } & Delete Label`}
+                  </Text>
+                </Pressable>
+              )}
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={{ disabled: isLabelDeleting }}
@@ -2347,7 +2354,7 @@ export default function HomeScreen() {
                 onPress={() =>
                   void (isDeletingNoLabel
                     ? confirmNoLabelDeletion(true)
-                    : confirmLabelDeletion(true))
+                    : confirmLabelDeletion(!isDeletingEmptyLabel))
                 }
                 style={({ pressed }) => [
                   styles.deleteAllButton,
@@ -2357,6 +2364,8 @@ export default function HomeScreen() {
                 <Text style={styles.deleteAllButtonText}>
                   {isLabelDeleting
                     ? 'Deleting…'
+                    : isDeletingEmptyLabel
+                    ? `Delete ${labelBeingDeleted?.name ?? 'Label'}`
                     : isDeletingNoLabel
                     ? `Move ${peopleInDeleteDialog} ${
                         peopleInDeleteDialog === 1 ? 'Person' : 'People'
