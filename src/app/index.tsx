@@ -1170,23 +1170,20 @@ export default function HomeScreen() {
     const restoredPerson = trash.find((person) => person.id === personId);
     if (!restoredPerson) return;
 
-    const restoredLabelId = labels.some(
-      (label) => label.id === restoredPerson.labelId,
-    )
-      ? restoredPerson.labelId
-      : null;
-    const person: Person = {
-      id: restoredPerson.id,
-      name: restoredPerson.name,
-      description: restoredPerson.description,
-      labelId: restoredLabelId,
-      createdAt: restoredPerson.createdAt,
-    };
-
     try {
       const restored = await restorePersonRecord(db, personId);
       if (!restored) throw new Error(`Person ${personId} was not found in Trash.`);
-      setPeople((current) => [...current, person]);
+      const { person, label } = restored;
+      if (label) {
+        setLabels((current) => [
+          ...current.filter((item) => item.id !== label.id),
+          label,
+        ]);
+      }
+      setPeople((current) => [
+        ...current.filter((item) => item.id !== person.id),
+        person,
+      ]);
       setTrash((current) => current.filter((item) => item.id !== personId));
     } catch (error) {
       showMutationError('restore this person', error);

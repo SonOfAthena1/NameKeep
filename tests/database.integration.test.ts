@@ -83,11 +83,94 @@ describe('SQLite persistence', () => {
       { id: 'ada', deletedAt: 40 },
     ]);
 
-    await expect(restorePerson(database, 'ada', 50)).resolves.toBe(true);
+    await expect(restorePerson(database, 'ada', 50)).resolves.toMatchObject({
+      person: { id: 'ada', labelId: 'friends', deletedAt: null },
+      label: { id: 'friends', color: 'blue' },
+    });
     expect((await getActivePerson(database, 'ada'))?.deletedAt).toBeNull();
     await movePersonToTrash(database, 'ada', 60);
     await expect(deletePersonPermanently(database, 'ada')).resolves.toBe(true);
     await expect(listTrashedPeople(database)).resolves.toEqual([]);
+  });
+
+  test.each(['person-first', 'label-first'])('restores the original label after %s deletion without duplicates', async (path) => {
+    await createLabel(database, { id: 'work', name: 'Work', color: 'orange', createdAt: 10 });
+    for (const id of ['one', 'two']) {
+      await createPerson(database, { id, name: id, description: '', labelId: 'work', createdAt: 20 });
+      if (path === 'person-first') await movePersonToTrash(database, id, 30);
+    }
+    await deleteLabelAndHandlePeople(database, 'work', {
+      destinationLabelId: null,
+      movePeopleToTrash: path === 'label-first',
+    }, 40);
+
+    for (const id of ['one', 'two']) {
+      await expect(restorePerson(database, id, 50)).resolves.toMatchObject({
+        person: { id, labelId: 'work', deletedAt: null },
+        label: { id: 'work', name: 'Work', color: 'orange', createdAt: 10, deletedAt: null },
+      });
+    }
+    expect(await listActiveLabels(database)).toHaveLength(1);
+    expect(await listTrashedPeople(database)).toEqual([]);
+    expect((await listActivePeople(database)).map((person) => person.labelId)).toEqual(['work', 'work']);
+    await expect(restorePerson(database, 'one')).resolves.toBeNull();
+    await expect(restorePerson(database, 'missing')).resolves.toBeNull();
+  });
+
+  test('reuses a replacement label with the same normalized name', async () => {
+    await createLabel(database, { id: 'old-work', name: 'Work', color: 'orange' });
+    for (const id of ['one', 'two']) {
+      await createPerson(database, { id, name: id, description: '', labelId: 'old-work' });
+    }
+    await deleteLabelAndHandlePeople(database, 'old-work', {
+      destinationLabelId: null, movePeopleToTrash: true,
+    });
+    await createLabel(database, { id: 'new-work', name: '  ｗＯＲＫ  ', color: 'blue' });
+
+    for (const id of ['one', 'two']) {
+      await expect(restorePerson(database, id)).resolves.toMatchObject({
+        person: { labelId: 'new-work' }, label: { id: 'new-work', color: 'blue' },
+      });
+    }
+    expect((await listActiveLabels(database)).map((label) => label.id)).toEqual(['new-work']);
+    expect((await listActivePeople(database)).every((person) => person.labelId === 'new-work')).toBe(true);
+  });
+
+  test('keeps the original active label even after a rename', async () => {
+    await createLabel(database, { id: 'work', name: 'Work', color: 'orange' });
+    await createPerson(database, { id: 'ada', name: 'Ada', description: '', labelId: 'work' });
+    await movePersonToTrash(database, 'ada');
+    await database.runAsync("UPDATE labels SET name = 'Office', color = 'blue' WHERE id = 'work'");
+    await createLabel(database, { id: 'other-work', name: 'Work', color: 'green' });
+    await expect(restorePerson(database, 'ada')).resolves.toMatchObject({
+      person: { labelId: 'work' }, label: { id: 'work', name: 'Office', color: 'blue' },
+    });
+  });
+
+  test('restores an unlabeled person without creating a label', async () => {
+    await createPerson(database, { id: 'ada', name: 'Ada', description: '', labelId: null });
+    await movePersonToTrash(database, 'ada');
+    await expect(restorePerson(database, 'ada')).resolves.toMatchObject({
+      person: { labelId: null, deletedAt: null }, label: null,
+    });
+    expect(await listActiveLabels(database)).toEqual([]);
+  });
+
+  test('rolls back label reactivation when restoring the person fails', async () => {
+    await createLabel(database, { id: 'work', name: 'Work', color: 'orange' });
+    await createPerson(database, { id: 'ada', name: 'Ada', description: '', labelId: 'work' });
+    await deleteLabelAndHandlePeople(database, 'work', {
+      destinationLabelId: null, movePeopleToTrash: true,
+    });
+    await database.execAsync(`
+      CREATE TRIGGER fail_restore BEFORE UPDATE OF deleted_at ON people
+      WHEN NEW.deleted_at IS NULL
+      BEGIN SELECT RAISE(ABORT, 'Restore failed'); END;
+    `);
+    await expect(restorePerson(database, 'ada')).rejects.toThrow('Restore failed');
+    expect(await listActiveLabels(database)).toEqual([]);
+    expect(await getActivePerson(database, 'ada')).toBeNull();
+    expect(await listTrashedPeople(database)).toMatchObject([{ id: 'ada', labelId: 'work' }]);
   });
 
   test('creates a typed label before saving the person who uses it', async () => {

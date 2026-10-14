@@ -1,6 +1,13 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import type { StoredPerson, StoredTrashedPerson } from '@/database/types';
+import { listActiveLabels } from '@/database/labels-repository';
+import { withWriteTransaction } from '@/database/transactions';
+import type {
+  StoredLabel,
+  StoredPerson,
+  StoredTrashedPerson,
+} from '@/database/types';
+import { normalizeLabelName } from '@/lib/label-names';
 
 type PersonRow = {
   id: string;
@@ -185,31 +192,69 @@ export async function movePersonToTrash(
   return result.changes > 0;
 }
 
-/** Restores a person from Trash and drops a label that no longer exists. */
+export type RestorePersonResult = {
+  person: StoredPerson;
+  label: StoredLabel | null;
+};
+
+/** Restores a person and reuses or reactivates their label in one transaction. */
 export async function restorePerson(
   db: SQLiteDatabase,
   id: string,
   restoredAt = Date.now(),
-): Promise<boolean> {
-  const result = await db.runAsync(
-    `UPDATE people
-      SET label_id = CASE
-            WHEN label_id IS NULL THEN NULL
-            WHEN EXISTS (
-              SELECT 1
-              FROM labels
-              WHERE labels.id = people.label_id
-                AND labels.deleted_at IS NULL
-            ) THEN label_id
-            ELSE NULL
-          END,
-          deleted_at = NULL,
-          updated_at = $restoredAt
-      WHERE id = $id
-        AND deleted_at IS NOT NULL`,
-    { $id: id, $restoredAt: restoredAt },
-  );
-  return result.changes > 0;
+): Promise<RestorePersonResult | null> {
+  let result: RestorePersonResult | null = null;
+  await withWriteTransaction(db, async (transaction) => {
+    const row = await transaction.getFirstAsync<PersonRow>(
+      `SELECT ${PERSON_COLUMNS} FROM people
+        WHERE id = $id AND deleted_at IS NOT NULL`,
+      { $id: id },
+    );
+    if (!row) return;
+
+    let label: StoredLabel | null = null;
+    if (row.label_id !== null) {
+      label = await transaction.getFirstAsync<StoredLabel>(
+        `SELECT id, name, color, created_at AS createdAt,
+                updated_at AS updatedAt, deleted_at AS deletedAt
+          FROM labels WHERE id = $id`,
+        { $id: row.label_id },
+      );
+      if (label && label.deletedAt !== null) {
+        const originalLabel = label;
+        const activeLabels = await listActiveLabels(transaction);
+        label = activeLabels.find(
+          (candidate) =>
+            normalizeLabelName(candidate.name) === normalizeLabelName(originalLabel.name),
+        ) ?? null;
+        if (!label) {
+          await transaction.runAsync(
+            `UPDATE labels SET deleted_at = NULL, updated_at = $restoredAt
+              WHERE id = $id`,
+            { $id: originalLabel.id, $restoredAt: restoredAt },
+          );
+          label = { ...originalLabel, deletedAt: null, updatedAt: restoredAt };
+        }
+      }
+    }
+
+    await transaction.runAsync(
+      `UPDATE people SET label_id = $labelId, deleted_at = NULL,
+                          updated_at = $restoredAt
+        WHERE id = $id AND deleted_at IS NOT NULL`,
+      { $id: id, $labelId: label?.id ?? null, $restoredAt: restoredAt },
+    );
+    result = {
+      person: {
+        ...mapPerson(row),
+        labelId: label?.id ?? null,
+        deletedAt: null,
+        updatedAt: restoredAt,
+      },
+      label,
+    };
+  });
+  return result;
 }
 
 /** Deletes a person from Trash for good. */
